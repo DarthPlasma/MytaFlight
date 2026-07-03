@@ -81,6 +81,10 @@ static lowVoltageCutoff_t lowVoltageCutoff;
 static currentMeter_t currentMeter;
 static voltageMeter_t voltageMeter;
 
+#ifdef USE_BATTERY_IMPEDANCE
+static uint16_t powerSupplyImpedance = 0; // estimated battery internal resistance in milliohms (0 = not yet estimated)
+#endif
+
 static batteryState_e batteryState;
 static batteryState_e voltageState;
 static batteryState_e consumptionState;
@@ -125,7 +129,7 @@ void pgResetFn_batteryProfiles(batteryProfile_t *batteryProfiles)
 
 PG_REGISTER_ARRAY_WITH_RESET_FN(batteryProfile_t, BATTERY_PROFILE_COUNT, batteryProfiles, PG_BATTERY_PROFILES, 1);
 
-PG_REGISTER_WITH_RESET_TEMPLATE(batteryConfig_t, batteryConfig, PG_BATTERY_CONFIG, 4);
+PG_REGISTER_WITH_RESET_TEMPLATE(batteryConfig_t, batteryConfig, PG_BATTERY_CONFIG, 5);
 
 PG_RESET_TEMPLATE(batteryConfig_t, batteryConfig,
     // voltage
@@ -146,6 +150,12 @@ PG_RESET_TEMPLATE(batteryConfig_t, batteryConfig,
     .ibatLpfPeriod = DEFAULT_IBAT_LPF_PERIOD,
     .vbatDurationForWarning = 0,
     .vbatDurationForCritical = 0,
+#ifdef USE_BATTERY_IMPEDANCE
+    .batteryImpedanceCurrentThreshold = 200, // 2.00 A minimum current step (iNAV default)
+    .batteryImpedanceVoltageThreshold = 4,   // 0.04 V minimum voltage drop (iNAV default)
+    .batteryImpedanceLpfPeriod = 12,         // 1.2 s, matches iNAV's stable-state impedance filter time constant
+    .batteryImpedanceStableCount = 10,       // iNAV IMPEDANCE_STABLE_SAMPLE_COUNT_THRESH
+#endif
 );
 
 void batteryUpdateVoltage(timeUs_t currentTimeUs)
@@ -508,6 +518,16 @@ void batteryInit(void)
     }
 }
 
+#ifdef USE_BATTERY_IMPEDANCE
+// Opportunistic ΔV/ΔI estimate of the battery internal resistance.
+// Scaffolding stub — the estimator logic is added in the next step.
+static void batteryUpdateImpedance(void)
+{
+    // TODO: record (vbat, amperage), and when the current step and voltage drop
+    // exceed the thresholds, update powerSupplyImpedance = ΔV/ΔI through a PT1 filter.
+}
+#endif
+
 void batteryUpdateCurrentMeter(timeUs_t currentTimeUs)
 {
     if (batteryCellCount == 0) {
@@ -557,6 +577,10 @@ void batteryUpdateCurrentMeter(timeUs_t currentTimeUs)
             currentMeterReset(&currentMeter);
             break;
     }
+
+#ifdef USE_BATTERY_IMPEDANCE
+    batteryUpdateImpedance();
+#endif
 }
 
 uint8_t calculateBatteryPercentageRemaining(void)
@@ -628,6 +652,20 @@ uint16_t getBatteryAverageCellVoltage(void)
 uint16_t getBatterySagCellVoltage(void)
 {
     return (batteryCellCount ? voltageMeter.sagFiltered / batteryCellCount : 0);
+}
+#endif
+
+#ifdef USE_BATTERY_IMPEDANCE
+uint16_t getBatteryImpedance(void)
+{
+    return powerSupplyImpedance; // milliohms; populated by batteryUpdateImpedance()
+}
+
+uint16_t getBatterySagCompensatedVoltage(void)
+{
+    // TODO: return the reconstructed no-load voltage (vbat + R*I) once the estimator lands.
+    // For now fall back to the measured battery voltage so callers get a sane value.
+    return getBatteryVoltage();
 }
 #endif
 

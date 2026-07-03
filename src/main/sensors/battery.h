@@ -83,6 +83,13 @@ typedef struct batteryConfig_s {
     uint8_t vbatDurationForCritical;        // Period voltage has to sustain before the battery state is set to BATTERY_CRIT (in 0.1 s)
     uint8_t vbatSagLpfPeriod;               // Period of the cutoff frequency for the Vbat sag and PID compensation filter (in 0.1 s)
 
+#ifdef USE_BATTERY_IMPEDANCE
+    uint16_t batteryImpedanceCurrentThreshold; // Minimum current step (delta I) to accept an impedance sample, in centiampere (0.01A units)
+    uint8_t  batteryImpedanceVoltageThreshold; // Minimum voltage drop (delta V) to accept an impedance sample, in 0.01V units
+    uint8_t  batteryImpedanceLpfPeriod;        // Period of the cutoff frequency for the battery internal impedance estimate filter (in 0.1 s)
+    uint8_t  batteryImpedanceStableCount;      // Number of consistent samples required before the impedance estimate is considered stable
+#endif
+
 #ifdef USE_BATTERY_CONTINUE
     bool isBatteryContinueEnabled;
 #endif
@@ -128,6 +135,11 @@ uint16_t getBatteryVoltageLatest(void);
 uint8_t getBatteryCellCount(void);
 uint16_t getBatteryAverageCellVoltage(void);
 uint16_t getBatterySagCellVoltage(void);
+
+#ifdef USE_BATTERY_IMPEDANCE
+uint16_t getBatteryImpedance(void);             // estimated battery internal resistance in milliohms
+uint16_t getBatterySagCompensatedVoltage(void); // estimated no-load battery voltage in 0.01V units (vbat + R*I)
+#endif
 
 bool isAmperageConfigured(void);
 int32_t getAmperage(void);
