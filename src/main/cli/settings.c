@@ -1011,6 +1011,12 @@ const clivalue_t valueTable[] = {
 #if defined(USE_BATTERY_VOLTAGE_SAG_COMPENSATION)
     { "vbat_sag_lpf_period",        VAR_UINT8  | MASTER_VALUE, .config.minmaxUnsigned = { 1, UINT8_MAX }, PG_BATTERY_CONFIG, offsetof(batteryConfig_t, vbatSagLpfPeriod) },
 #endif
+#if defined(USE_BATTERY_IMPEDANCE)
+    { "battery_impedance_i_threshold",  VAR_UINT16 | MASTER_VALUE, .config.minmaxUnsigned = { 1, UINT16_MAX }, PG_BATTERY_CONFIG, offsetof(batteryConfig_t, batteryImpedanceCurrentThreshold) },
+    { "battery_impedance_v_threshold",  VAR_UINT8  | MASTER_VALUE, .config.minmaxUnsigned = { 1, UINT8_MAX }, PG_BATTERY_CONFIG, offsetof(batteryConfig_t, batteryImpedanceVoltageThreshold) },
+    { "battery_impedance_lpf_period",   VAR_UINT8  | MASTER_VALUE, .config.minmaxUnsigned = { 1, UINT8_MAX }, PG_BATTERY_CONFIG, offsetof(batteryConfig_t, batteryImpedanceLpfPeriod) },
+    { "battery_impedance_stable_count", VAR_UINT8  | MASTER_VALUE, .config.minmaxUnsigned = { 1, UINT8_MAX }, PG_BATTERY_CONFIG, offsetof(batteryConfig_t, batteryImpedanceStableCount) },
+#endif
     { "ibat_lpf_period",            VAR_UINT8  | MASTER_VALUE, .config.minmaxUnsigned = { 0, UINT8_MAX }, PG_BATTERY_CONFIG, offsetof(batteryConfig_t, ibatLpfPeriod) },
     { "vbat_duration_for_warning",  VAR_UINT8  | MASTER_VALUE, .config.minmax = { 0, 150 }, PG_BATTERY_CONFIG, offsetof(batteryConfig_t, vbatDurationForWarning) },
     { "vbat_duration_for_critical", VAR_UINT8  | MASTER_VALUE, .config.minmax = { 0, 150 }, PG_BATTERY_CONFIG, offsetof(batteryConfig_t, vbatDurationForCritical) },
