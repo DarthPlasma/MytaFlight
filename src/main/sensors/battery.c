@@ -83,6 +83,9 @@ static voltageMeter_t voltageMeter;
 
 #ifdef USE_BATTERY_IMPEDANCE
 static uint16_t powerSupplyImpedance = 0; // estimated battery internal resistance in milliohms (0 = not yet estimated)
+static uint16_t sagCompensatedVBat = 0;   // reconstructed no-load battery voltage in 0.01V units
+static pt1Filter_t impedanceFilter;       // smooths the raw dV/dI impedance samples
+static uint16_t impedanceSampleCount = 0; // number of accepted impedance samples so far
 #endif
 
 static batteryState_e batteryState;
@@ -519,12 +522,70 @@ void batteryInit(void)
 }
 
 #ifdef USE_BATTERY_IMPEDANCE
-// Opportunistic ΔV/ΔI estimate of the battery internal resistance.
-// Scaffolding stub — the estimator logic is added in the next step.
-static void batteryUpdateImpedance(void)
+#define IMPEDANCE_RECORD_INTERVAL_US  500000 // 0.5 s between reference (vbat, amperage) snapshots (iNAV cadence)
+#define IMPEDANCE_WARMUP_LPF_PERIOD   5      // 0.5 s filter period during warm-up (0.1 s units), matches iNAV
+
+// Opportunistic estimate of the battery internal resistance from naturally occurring
+// throttle-induced current steps (no active load switching). When the current rises and the
+// voltage sags by more than the configured thresholds between two snapshots ~0.5 s apart,
+// Ohm's law gives R = dV / dI, which is smoothed by a PT1 filter. The reconstructed no-load
+// voltage (vbat + R * I) is then available for display / sag-aware readouts.
+static void batteryUpdateImpedance(timeUs_t currentTimeUs)
 {
-    // TODO: record (vbat, amperage), and when the current step and voltage drop
-    // exceed the thresholds, update powerSupplyImpedance = ΔV/ΔI through a PT1 filter.
+    static timeUs_t recordTimestamp = 0;
+    static uint16_t vbatRecord = 0;
+    static int32_t amperageRecord = 0;
+
+    // Estimate R from the unfiltered pair so the two operating points are not smeared by BF's
+    // display (3 s) and current (1 s) filters, which have different time constants and would bias
+    // dV/dI low. The PT1 further down rejects the resulting per-sample noise.
+    const uint16_t vbat = getBatteryVoltageLatest(); // unfiltered battery voltage, 0.01V units
+    const int32_t amperage = getAmperageLatest();    // unfiltered current, centiampere (0.01A) units
+
+    if (cmpTimeUs(currentTimeUs, recordTimestamp) >= IMPEDANCE_RECORD_INTERVAL_US) {
+        const int32_t deltaI = amperage - amperageRecord;  // centiampere; positive when load increased
+        const int32_t deltaV = (int32_t)vbatRecord - vbat; // 0.01V; positive when voltage sagged under load
+
+        if (deltaI >= (int32_t)batteryConfig()->batteryImpedanceCurrentThreshold &&
+            deltaV >= (int32_t)batteryConfig()->batteryImpedanceVoltageThreshold) {
+
+            // R[mOhm] = dV[0.01V] * 1000 / dI[0.01A]
+            const int32_t impedanceSample = deltaV * 1000 / deltaI;
+
+            // Converge quickly while warming up, then relax to the configured time constant.
+            const uint8_t lpfPeriod = (impedanceSampleCount < batteryConfig()->batteryImpedanceStableCount)
+                ? IMPEDANCE_WARMUP_LPF_PERIOD
+                : batteryConfig()->batteryImpedanceLpfPeriod;
+            const float gain = pt1FilterGain(GET_BATTERY_LPF_FREQUENCY(lpfPeriod), IMPEDANCE_RECORD_INTERVAL_US * 1e-6f);
+
+            if (impedanceSampleCount == 0) {
+                pt1FilterInit(&impedanceFilter, gain);
+                impedanceFilter.state = impedanceSample; // seed to avoid a slow ramp from zero
+                powerSupplyImpedance = impedanceSample;
+            } else {
+                pt1FilterUpdateCutoff(&impedanceFilter, gain);
+                powerSupplyImpedance = lrintf(pt1FilterApply(&impedanceFilter, impedanceSample));
+            }
+
+            if (impedanceSampleCount < UINT16_MAX) {
+                impedanceSampleCount++;
+            }
+        }
+
+        vbatRecord = vbat;
+        amperageRecord = amperage;
+        recordTimestamp = currentTimeUs;
+    }
+
+    // Reconstruct the no-load voltage for display from the smooth filtered signals + estimated R,
+    // capped at a full pack. Falls back to the plain voltage until the estimate is trustworthy.
+    if (impedanceSampleCount >= batteryConfig()->batteryImpedanceStableCount && powerSupplyImpedance > 0) {
+        const uint16_t fullVoltage = batteryCellCount * currentBatteryProfile->vbatfullcellvoltage;
+        const uint32_t compensated = getBatteryVoltage() + (uint32_t)powerSupplyImpedance * getAmperage() / 1000;
+        sagCompensatedVBat = MIN(fullVoltage, (uint16_t)compensated);
+    } else {
+        sagCompensatedVBat = getBatteryVoltage();
+    }
 }
 #endif
 
@@ -579,7 +640,7 @@ void batteryUpdateCurrentMeter(timeUs_t currentTimeUs)
     }
 
 #ifdef USE_BATTERY_IMPEDANCE
-    batteryUpdateImpedance();
+    batteryUpdateImpedance(currentTimeUs);
 #endif
 }
 
@@ -663,9 +724,7 @@ uint16_t getBatteryImpedance(void)
 
 uint16_t getBatterySagCompensatedVoltage(void)
 {
-    // TODO: return the reconstructed no-load voltage (vbat + R*I) once the estimator lands.
-    // For now fall back to the measured battery voltage so callers get a sane value.
-    return getBatteryVoltage();
+    return sagCompensatedVBat;
 }
 #endif
 
