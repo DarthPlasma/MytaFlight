@@ -173,22 +173,21 @@ const SAMPLES = {
   osd_nheading_pos: GR+"120", osd_nvario_pos:"1.5", osd_efficiency_pos:"210",
   osd_core_temp_pos:"C"+GT+" 45"+GD, osd_esc_tmp_pos:"E"+GT+" 45"+GD, osd_g_force_pos:"1.2G",
   osd_pit_ang_pos:"P-4.5°", osd_rol_ang_pos:"R 2.3°",
-  osd_flymode_pos:"ANGL", osd_throttle_pos:"35%", osd_warnings_pos:"LAND NOW",
+  osd_compass_bar_pos:"──N─┃─E──", osd_flymode_pos:"ANGL", osd_throttle_pos:"35%", osd_warnings_pos:"LAND NOW",
 };
 
 // Multi-cell (graphic/background) elements: relative cells [{dx,dy,ch}] instead of a single-row string.
 // Box-drawing chars render reliably in monospace; shapes are representative for layout, not pixel-exact.
+// Anchor semantics follow Betaflight's draw code (offsets relative to the stored position).
 const MULTICELL = {
-  osd_crosshairs_pos: () => [{dx:0,dy:0,ch:'─'},{dx:1,dy:0,ch:'┼'},{dx:2,dy:0,ch:'─'}],
-  osd_ah_pos: () => Array.from({length:9},(_,i)=>({dx:i,dy:0,ch:'─'})),        // artificial horizon
-  osd_ah_sbar_pos: () => {                                                     // AH side bars
-    const cells=[], H=7, sep=24;
-    for(let i=0;i<H;i++){ cells.push({dx:0,dy:i,ch:i===3?'┤':'│'}); cells.push({dx:sep,dy:i,ch:i===3?'├':'│'}); }
-    return cells;
+  osd_crosshairs_pos: () => [{dx:0,dy:0,ch:'─'},{dx:1,dy:0,ch:'┼'},{dx:2,dy:0,ch:'─'}], // 3 wide, left-anchored
+  osd_ah_pos: () => {                    // artificial horizon: 9 wide centred on X; level line ~4 rows below anchor
+    const cells=[]; for(let dx=-4; dx<=4; dx++) cells.push({dx, dy:4, ch:'─'}); return cells;
   },
-  osd_compass_bar_pos: () => {                                                 // heading tape
-    const cells = ['─','N','─','─','─','E','─','─','─'].map((ch,i)=>({dx:i, dy:1, ch}));
-    cells.push({dx:4, dy:0, ch:'▾'});
+  osd_ah_sbar_pos: () => {               // side bars: anchor is the CENTRE; bars at +/-7 cols, rows +/-3
+    const W=7, H=3, cells=[];
+    for(let dy=-H; dy<=H; dy++){ cells.push({dx:-W,dy,ch:'│'}); cells.push({dx:W,dy,ch:'│'}); }
+    cells.push({dx:-W+1,dy:0,ch:'›'}); cells.push({dx:W-1,dy:0,ch:'‹'}); // inward level markers
     return cells;
   },
 };
