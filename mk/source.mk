@@ -147,6 +147,7 @@ COMMON_SRC = \
             sensors/adcinternal.c \
             sensors/battery.c \
             sensors/current.c \
+            sensors/temperature.c \
             sensors/voltage.c \
             target/config_helper.c \
             fc/init.c \
