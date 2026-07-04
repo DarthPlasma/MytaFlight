@@ -580,8 +580,12 @@ static void batteryUpdateImpedance(timeUs_t currentTimeUs)
     // Reconstruct the no-load voltage for display from the smooth filtered signals + estimated R,
     // capped at a full pack. Falls back to the plain voltage until the estimate is trustworthy.
     if (impedanceSampleCount >= batteryConfig()->batteryImpedanceStableCount && powerSupplyImpedance > 0) {
+        const int32_t amperageNow = getAmperage();
+        // Guard against a momentarily negative current reading (sensor noise near zero): the drop is
+        // only meaningful under load, and this avoids an unsigned wrap in the multiply below.
+        const uint32_t vDrop = (amperageNow > 0) ? (uint32_t)powerSupplyImpedance * amperageNow / 1000 : 0;
         const uint16_t fullVoltage = batteryCellCount * currentBatteryProfile->vbatfullcellvoltage;
-        const uint32_t compensated = getBatteryVoltage() + (uint32_t)powerSupplyImpedance * getAmperage() / 1000;
+        const uint32_t compensated = getBatteryVoltage() + vDrop;
         sagCompensatedVBat = MIN(fullVoltage, (uint16_t)compensated);
     } else {
         sagCompensatedVBat = getBatteryVoltage();
