@@ -152,18 +152,45 @@ const GLYPH_SVG = {
   batt:'<svg width="14" height="9" viewBox="0 0 14 9" fill="none" stroke="currentColor" stroke-width="1"><rect x="0.5" y="0.5" width="11" height="8" rx="1"/><rect x="12" y="3" width="2" height="3" fill="currentColor" stroke="none"/><rect x="2" y="2" width="6" height="5" fill="currentColor" stroke="none"/></svg>',
   degc:'<svg width="12" height="14" viewBox="0 0 12 14" fill="none" stroke="currentColor" stroke-width="1.1"><circle cx="2.6" cy="3" r="1.5"/><path d="M10.6 4.4a4.2 4.2 0 1 0 0 5.2"/></svg>',
   amp:'<svg width="10" height="14" viewBox="0 0 10 14" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round"><path d="M1 13 5 1l4 12M2.5 9h5"/></svg>',
+  sat:'<svg width="14" height="12" viewBox="0 0 14 12" fill="currentColor"><g transform="rotate(45 7 6)"><rect x="5.5" y="4.5" width="3" height="3"/><rect x="1.2" y="5" width="3.3" height="2"/><rect x="9.5" y="5" width="3.3" height="2"/></g></svg>',
+  home:'<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1" stroke-linejoin="round"><path d="M1 5.5 6 1l5 4.5M2.5 5V10.5h7V5"/></svg>',
+  arrow:'<svg width="11" height="13" viewBox="0 0 11 13" fill="currentColor"><path d="M5.5 0 10 5.5H7V13H4V5.5H1z"/></svg>',
+  alt:'<svg width="11" height="14" viewBox="0 0 11 14" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linejoin="round" stroke-linecap="round"><path d="M5.5 2v8.5M2.6 4.9 5.5 2l2.9 2.9M1 12.5h9"/></svg>',
 };
 // single-cell glyph markers embedded in sample strings (private-use code points, 1 char = 1 cell)
 const GT='', GV='', GB='', GD='', GA='';
-const GLYPHS = { [GT]:GLYPH_SVG.thermo, [GV]:GLYPH_SVG.volt, [GB]:GLYPH_SVG.batt, [GD]:GLYPH_SVG.degc, [GA]:GLYPH_SVG.amp };
+const GS='', GH='', GR='', GL='';
+const GLYPHS = { [GT]:GLYPH_SVG.thermo, [GV]:GLYPH_SVG.volt, [GB]:GLYPH_SVG.batt, [GD]:GLYPH_SVG.degc, [GA]:GLYPH_SVG.amp,
+                 [GS]:GLYPH_SVG.sat, [GH]:GLYPH_SVG.home, [GR]:GLYPH_SVG.arrow, [GL]:GLYPH_SVG.alt };
 
 const SAMPLES = {
   osd_vbat_pos: GB+"16.8"+GV, osd_sag_comp_batt_pos:"16.8"+GV, osd_avg_cell_voltage_pos: GB+"4.20"+GV,
   osd_battery_impedance_pos:"  18mR", osd_battery_temp_pos:"B"+GT+" 45"+GD, osd_rssi_pos:"RSS99", osd_link_quality_pos:"LQ:99",
   osd_craft_name_pos:"CRAFTNAME", osd_current_pos:"12.4"+GA, osd_mah_drawn_pos:"1234mAh",
-  osd_power_pos:"210W", osd_altitude_pos:"12.3m", osd_gps_speed_pos:"45", osd_gps_sats_pos:"S12",
+  osd_power_pos:"210W", osd_altitude_pos: GL+"12.3m", osd_gps_speed_pos:"45",
+  osd_gps_sats_pos: GS+"12", osd_gps_lat_pos:"47.1234", osd_gps_lon_pos:" 9.5678",
+  osd_home_dir_pos: GR, osd_home_dist_pos: GH+"120m", osd_flight_dist_pos:"1.2km",
+  osd_numerical_heading_pos: GR+"120", osd_numerical_vario_pos:"1.5", osd_efficiency_pos:"210",
   osd_flymode_pos:"ANGL", osd_throttle_pos_pos:"35%", osd_warnings_pos:"LAND NOW",
 };
+
+// Multi-cell (graphic/background) elements: relative cells [{dx,dy,ch}] instead of a single-row string.
+// Box-drawing chars render reliably in monospace; shapes are representative for layout, not pixel-exact.
+const MULTICELL = {
+  osd_crosshairs_pos: () => [{dx:0,dy:0,ch:'─'},{dx:1,dy:0,ch:'┼'},{dx:2,dy:0,ch:'─'}],
+  osd_artificial_horizon_pos: () => Array.from({length:9},(_,i)=>({dx:i,dy:0,ch:'─'})),
+  osd_horizon_sidebars_pos: () => {
+    const cells=[], H=7, sep=24;
+    for(let i=0;i<H;i++){ cells.push({dx:0,dy:i,ch:'│'}); cells.push({dx:sep,dy:i,ch:'│'}); }
+    cells.push({dx:0,dy:3,ch:'┤'}); cells.push({dx:sep,dy:3,ch:'├'});
+    return cells;
+  },
+};
+// Cells occupied by an element, relative to its (x,y): multi-cell shape or one row of the sample string.
+function elementCells(el){
+  if (MULTICELL[el.name]) return MULTICELL[el.name](el);
+  return [...sampleFor(el.name)].map((ch,i)=>({dx:i, dy:0, ch}));
+}
 function sampleFor(name){
   if (SAMPLES[name]) return SAMPLES[name];
   return name.replace(/^osd_/,'').replace(/_pos$/,'').toUpperCase().slice(0,12) || "EL";
@@ -213,12 +240,11 @@ function renderGrid(){
   const ovl = Array.from({length:ROWS},()=>Array(COLS).fill(false));
   for (const el of elements){
     if (!el.prof[prof-1]) continue;
-    const s = sampleFor(el.name);
-    for (let i=0;i<s.length;i++){
-      const cx = el.x + i, cy = el.y;
+    for (const c of elementCells(el)){
+      const cx = el.x + c.dx, cy = el.y + c.dy;
       if (cx<0||cx>=COLS||cy<0||cy>=ROWS) continue;
       if (owner[cy][cx] !== null) ovl[cy][cx] = true;
-      owner[cy][cx] = { name:el.name, ch:s[i] };
+      owner[cy][cx] = { name:el.name, ch:c.ch };
     }
   }
   let html = '';
@@ -272,7 +298,7 @@ function renderOutput(){
     .map(el=>`set ${el.name} = ${valueOf(el)}`).join('\n');
 }
 function syncDatalist(){
-  $('known').innerHTML = Object.keys(SAMPLES).map(n=>`<option value="${n}">`).join('');
+  $('known').innerHTML = [...Object.keys(SAMPLES), ...Object.keys(MULTICELL)].map(n=>`<option value="${n}">`).join('');
 }
 
 // ---- interactions ----
