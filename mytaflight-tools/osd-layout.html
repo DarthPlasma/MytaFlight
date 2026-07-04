@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MyTAflight — OSD Layout Tool</title>
+<style>
+  :root { --bg:#12151c; --panel:#1b2029; --line:#2c333f; --fg:#e6e9ef; --muted:#8b93a3;
+          --accent:#4ea1ff; --cell:#0c0f15; --cellGrid:#1f2530; --own:#a7c7ff; --ovl:#ff5d5d; --sel:#ffd23f; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:14px/1.4 -apple-system,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--fg); }
+  header { padding:14px 18px; border-bottom:1px solid var(--line); }
+  header h1 { margin:0; font-size:16px; } header p { margin:4px 0 0; color:var(--muted); font-size:12px; }
+  main { display:grid; grid-template-columns:1fr 340px; gap:16px; padding:16px; align-items:start; }
+  @media (max-width:900px){ main{ grid-template-columns:1fr; } }
+  .panel { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:12px; }
+  .panel h2 { margin:0 0 10px; font-size:13px; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; }
+  label { color:var(--muted); font-size:12px; } select,input,button,textarea { font-family:inherit; }
+  select,input[type=number],input[type=text] { background:var(--cell); color:var(--fg); border:1px solid var(--line);
+     border-radius:5px; padding:5px 7px; }
+  input[type=number]{ width:58px; } button { background:var(--accent); color:#04101f; border:0; border-radius:5px;
+     padding:6px 11px; cursor:pointer; font-weight:600; } button.ghost{ background:var(--cellGrid); color:var(--fg); }
+  button:hover{ filter:brightness(1.08); } textarea { width:100%; background:var(--cell); color:var(--fg);
+     border:1px solid var(--line); border-radius:6px; padding:9px; resize:vertical; font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12px; }
+  .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:10px; }
+  /* grid */
+  #gridWrap { overflow:auto; border:1px solid var(--line); border-radius:6px; background:#000; padding:8px; }
+  #grid { display:grid; font-family:ui-monospace,Menlo,Consolas,monospace; font-size:13px; line-height:1; width:max-content; }
+  .gc { width:15px; height:20px; display:flex; align-items:center; justify-content:center; color:#39424f;
+        background:var(--cell); border-right:1px solid #10141b; border-bottom:1px solid #10141b; user-select:none; cursor:crosshair; }
+  .gc.own { color:var(--own); background:#0d1826; } .gc.ovl { color:#fff; background:var(--ovl); }
+  .gc.sel { outline:1px solid var(--sel); outline-offset:-1px; }
+  .gc:hover { background:#182234; }
+  /* element list */
+  .el { border:1px solid var(--line); border-radius:6px; padding:8px; margin-bottom:8px; }
+  .el.selected { border-color:var(--sel); box-shadow:0 0 0 1px var(--sel) inset; }
+  .el .name { font-family:ui-monospace,monospace; font-size:12px; color:var(--accent); cursor:pointer; word-break:break-all; }
+  .el .ctrls { display:flex; gap:8px; align-items:center; margin-top:6px; flex-wrap:wrap; }
+  .chk { display:flex; gap:3px; align-items:center; color:var(--muted); font-size:12px; }
+  .del { background:transparent; color:var(--ovl); padding:2px 6px; font-weight:700; }
+  .hint { color:var(--muted); font-size:12px; margin:6px 0 0; }
+  code { background:var(--cellGrid); padding:1px 5px; border-radius:4px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>MyTAflight — OSD Layout Tool</h1>
+  <p>Paste a Betaflight <code>diff</code> / <code>dump</code>, arrange elements visually, copy the <code>set&nbsp;osd_*_pos</code> lines back into the CLI. Encoding matches osd.h (X is 6-bit / HD-aware; profile &amp; type bits preserved).</p>
+</header>
+
+<main>
+  <section>
+    <div class="panel">
+      <div class="row">
+        <label>Video system</label>
+        <select id="preset">
+          <option value="30,16">Analog PAL — 30×16</option>
+          <option value="30,13">Analog NTSC — 30×13</option>
+          <option value="50,18">HDZero — 50×18</option>
+          <option value="53,20" selected>DJI O3/O4 — 53×20</option>
+          <option value="53,20b">Walksnail — 53×20</option>
+          <option value="35,24">Walksnail (tall) — 35×24</option>
+          <option value="custom">Custom…</option>
+        </select>
+        <span id="customDims" style="display:none">
+          <label>cols</label><input type="number" id="cols" min="1" max="64" value="53">
+          <label>rows</label><input type="number" id="rows" min="1" max="32" value="20">
+        </span>
+        <label>Show profile</label>
+        <select id="profile"><option value="1">1</option><option value="2">2</option><option value="3">3</option></select>
+      </div>
+      <div id="gridWrap"><div id="grid"></div></div>
+      <p class="hint">Select an element on the right, then click a grid cell to move its top-left there. Red = overlap.</p>
+    </div>
+
+    <div class="panel" style="margin-top:16px">
+      <h2>Paste CLI (diff / dump)</h2>
+      <textarea id="input" rows="6" placeholder="set osd_vbat_pos = 2465&#10;set osd_craft_name_pos = 2081&#10;..."></textarea>
+      <div class="row" style="margin-top:8px">
+        <button id="parseBtn">Parse</button>
+        <button class="ghost" id="loadSample">Load sample</button>
+      </div>
+    </div>
+  </section>
+
+  <aside>
+    <div class="panel">
+      <h2>Output — paste into CLI</h2>
+      <textarea id="output" rows="8" readonly></textarea>
+      <div class="row" style="margin-top:8px"><button id="copyBtn">Copy</button></div>
+    </div>
+
+    <div class="panel" style="margin-top:16px">
+      <h2>Elements</h2>
+      <div class="row">
+        <input type="text" id="addName" placeholder="osd_..._pos" list="known" style="flex:1">
+        <datalist id="known"></datalist>
+        <button id="addBtn">Add</button>
+      </div>
+      <div class="hint">Quick add: <a href="#" data-add="osd_battery_impedance_pos" class="qa">impedance</a> · <a href="#" data-add="osd_sag_comp_batt_pos" class="qa">sag&nbsp;voltage</a></div>
+      <div id="elList" style="margin-top:10px"></div>
+    </div>
+  </aside>
+</main>
+
+<script>
+/* ---- Betaflight OSD position encoding (authoritative, from src/main/osd/osd.h) ----
+   bits 0-4  : low 5 bits of X (column)
+   bits 5-9  : Y (row) 0-31
+   bit  10   : high bit of X (HD extension) -> X range 0-63
+   bits 11-13: OSD profile visibility flags (1/2/3)
+   bits 14-15: OSD_TYPE (element render variant) -> preserved untouched
+*/
+const XY = 0x1F, XHD = 0x400, PROF = 11, TYPE_MASK = 0xC000;
+const decodeX = v => (v & XY) | ((v & XHD) >> 5);
+const decodeY = v => (v >> 5) & XY;
+const encode = (x, y, profFlags, typeBits) =>
+  ((x & XY) | ((x & 0x20) << 5) | ((y & XY) << 5) | (profFlags & 0x3800) | (typeBits & TYPE_MASK)) >>> 0;
+const profFlag = p => 1 << (PROF + p - 1);
+
+// Representative sample strings so footprints/overlaps are visible. Unknown -> label from name.
+const SAMPLES = {
+  osd_vbat_pos:"16.8V", osd_sag_comp_batt_pos:"16.8V", osd_avg_cell_voltage_pos:"4.20V",
+  osd_battery_impedance_pos:"  18mR", osd_battery_temp_pos:"B* 45C", osd_rssi_pos:"RSS99", osd_link_quality_pos:"LQ:99",
+  osd_craft_name_pos:"CRAFTNAME", osd_current_pos:"12.4A", osd_mah_drawn_pos:"1234mAh",
+  osd_power_pos:"210W", osd_altitude_pos:"12.3m", osd_gps_speed_pos:"45", osd_gps_sats_pos:"S12",
+  osd_flymode_pos:"ANGL", osd_throttle_pos_pos:"35%", osd_warnings_pos:"LAND NOW",
+};
+function sampleFor(name){
+  if (SAMPLES[name]) return SAMPLES[name];
+  return name.replace(/^osd_/,'').replace(/_pos$/,'').toUpperCase().slice(0,12) || "EL";
+}
+
+let elements = [];   // { name, x, y, prof:[b,b,b], type }
+let selected = null; // name
+let COLS = 53, ROWS = 20;
+
+const $ = id => document.getElementById(id);
+
+function readDims(){
+  const p = $('preset').value;
+  if (p === 'custom'){ COLS = clamp(+$('cols').value,1,64); ROWS = clamp(+$('rows').value,1,32); }
+  else { const [c,r] = p.split(','); COLS = +c; ROWS = parseInt(r,10); }
+}
+const clamp = (v,a,b)=>Math.max(a,Math.min(b,v|0));
+
+function parseCLI(text){
+  const re = /(?:set\s+)?(osd_[a-z0-9_]*?_pos)\s*=\s*(\d+)/gi;
+  const found = {}; let m;
+  while ((m = re.exec(text)) !== null){
+    const name = m[1].toLowerCase(), v = (+m[2]) >>> 0;
+    found[name] = mkElement(name, v);
+  }
+  const list = Object.values(found);
+  if (list.length) { elements = list; selected = null; render(); }
+  else alert("No osd_*_pos lines found in the pasted text.");
+}
+function mkElement(name, v){
+  return { name, x:decodeX(v), y:decodeY(v),
+           prof:[!!(v&profFlag(1)), !!(v&profFlag(2)), !!(v&profFlag(3))], type:v & TYPE_MASK };
+}
+function valueOf(el){
+  const pf = (el.prof[0]?profFlag(1):0)|(el.prof[1]?profFlag(2):0)|(el.prof[2]?profFlag(3):0);
+  return encode(el.x, el.y, pf, el.type);
+}
+
+function render(){ readDims(); renderGrid(); renderList(); renderOutput(); syncDatalist(); }
+
+function renderGrid(){
+  const prof = +$('profile').value;
+  const grid = $('grid');
+  grid.style.gridTemplateColumns = `repeat(${COLS}, 15px)`;
+  // owner map
+  const owner = Array.from({length:ROWS},()=>Array(COLS).fill(null));
+  const ovl = Array.from({length:ROWS},()=>Array(COLS).fill(false));
+  for (const el of elements){
+    if (!el.prof[prof-1]) continue;
+    const s = sampleFor(el.name);
+    for (let i=0;i<s.length;i++){
+      const cx = el.x + i, cy = el.y;
+      if (cx<0||cx>=COLS||cy<0||cy>=ROWS) continue;
+      if (owner[cy][cx] !== null) ovl[cy][cx] = true;
+      owner[cy][cx] = { name:el.name, ch:s[i] };
+    }
+  }
+  let html = '';
+  for (let y=0;y<ROWS;y++) for (let x=0;x<COLS;x++){
+    const o = owner[y][x]; const isSel = o && o.name===selected;
+    const cls = 'gc' + (o? (ovl[y][x]?' ovl':' own'):'') + (isSel?' sel':'');
+    const ch = o ? escapeHtml(o.ch) : '·';
+    html += `<div class="${cls}" data-x="${x}" data-y="${y}">${ch}</div>`;
+  }
+  grid.innerHTML = html;
+}
+const escapeHtml = c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]||c);
+
+function renderList(){
+  const wrap = $('elList');
+  const prof = +$('profile').value;
+  wrap.innerHTML = '';
+  elements.slice().sort((a,b)=>a.name.localeCompare(b.name)).forEach(el=>{
+    const div = document.createElement('div');
+    div.className = 'el' + (el.name===selected?' selected':'');
+    div.innerHTML =
+      `<div class="name">${el.name}</div>
+       <div class="ctrls">
+         <label>X</label><input type="number" min="0" max="63" value="${el.x}" data-f="x">
+         <label>Y</label><input type="number" min="0" max="31" value="${el.y}" data-f="y">
+         <span class="chk"><input type="checkbox" data-f="p1" ${el.prof[0]?'checked':''}>1</span>
+         <span class="chk"><input type="checkbox" data-f="p2" ${el.prof[1]?'checked':''}>2</span>
+         <span class="chk"><input type="checkbox" data-f="p3" ${el.prof[2]?'checked':''}>3</span>
+         <button class="del" title="remove">×</button>
+       </div>`;
+    div.querySelector('.name').onclick = ()=>{ selected = (selected===el.name?null:el.name); render(); };
+    div.querySelectorAll('input').forEach(inp=>{
+      inp.onchange = ()=>{
+        const f = inp.dataset.f;
+        if (f==='x') el.x = clamp(+inp.value,0,63);
+        else if (f==='y') el.y = clamp(+inp.value,0,31);
+        else if (f==='p1') el.prof[0]=inp.checked;
+        else if (f==='p2') el.prof[1]=inp.checked;
+        else if (f==='p3') el.prof[2]=inp.checked;
+        render();
+      };
+    });
+    div.querySelector('.del').onclick = ()=>{ elements = elements.filter(e=>e!==el); if(selected===el.name) selected=null; render(); };
+    if (!el.prof[prof-1]) div.style.opacity = .55;
+    wrap.appendChild(div);
+  });
+}
+
+function renderOutput(){
+  $('output').value = elements.slice().sort((a,b)=>a.name.localeCompare(b.name))
+    .map(el=>`set ${el.name} = ${valueOf(el)}`).join('\n');
+}
+function syncDatalist(){
+  $('known').innerHTML = Object.keys(SAMPLES).map(n=>`<option value="${n}">`).join('');
+}
+
+// ---- interactions ----
+$('grid').addEventListener('click', e=>{
+  const c = e.target.closest('.gc'); if(!c||!selected) return;
+  const el = elements.find(x=>x.name===selected); if(!el) return;
+  el.x = +c.dataset.x; el.y = +c.dataset.y;
+  // ensure it's visible in the profile you're viewing, so you see the move
+  const p = +$('profile').value; el.prof[p-1] = true;
+  render();
+});
+$('preset').onchange = ()=>{ $('customDims').style.display = $('preset').value==='custom'?'inline':'none'; render(); };
+$('cols').onchange = $('rows').onchange = render;
+$('profile').onchange = render;
+$('parseBtn').onclick = ()=>parseCLI($('input').value);
+$('addBtn').onclick = ()=>addElement($('addName').value.trim());
+$('addName').addEventListener('keydown', e=>{ if(e.key==='Enter') addElement($('addName').value.trim()); });
+document.querySelectorAll('.qa').forEach(a=>a.onclick = e=>{ e.preventDefault(); addElement(a.dataset.add); });
+$('copyBtn').onclick = ()=>{ $('output').select(); document.execCommand('copy'); $('copyBtn').textContent='Copied!'; setTimeout(()=>$('copyBtn').textContent='Copy',1200); };
+$('loadSample').onclick = ()=>{ $('input').value =
+`set osd_craft_name_pos = 2081
+set osd_vbat_pos = 2465
+set osd_avg_cell_voltage_pos = 2529
+set osd_rssi_pos = 2072
+set osd_flymode_pos = 2413`; parseCLI($('input').value); };
+
+function addElement(name){
+  if(!name) return;
+  if(!/^osd_[a-z0-9_]*_pos$/i.test(name)){ alert("Name must look like osd_..._pos"); return; }
+  name = name.toLowerCase();
+  if(elements.some(e=>e.name===name)){ selected=name; render(); return; }
+  const p = +$('profile').value;
+  const el = { name, x:1, y:1, prof:[p===1,p===2,p===3], type:0 };
+  elements.push(el); selected=name; $('addName').value=''; render();
+}
+
+render();
+</script>
+</body>
+</html>
