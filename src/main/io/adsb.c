@@ -34,14 +34,39 @@
 
 #include "fc/runtime_config.h"
 
+#include "flight/position.h"
+
+#include "pg/pg.h"
+#include "pg/pg_ids.h"
+
 #include "io/adsb.h"
 #include "io/gps.h"
 
-// MAVLink ADSB_FLAGS bits we require (mirror the MAVLink common dialect values).
+// MAVLink ADSB_FLAGS bits (mirror the MAVLink common dialect values).
 #define ADSB_FLAGS_VALID_COORDS   1
 #define ADSB_FLAGS_VALID_ALTITUDE 2
+#define ADSB_FLAGS_VALID_CALLSIGN 16
 // Drop vehicles farther than this (64 km), beyond useful traffic-awareness range.
 #define ADSB_LIMIT_CM (64L * 1000 * 100)
+
+PG_REGISTER_WITH_RESET_TEMPLATE(adsbConfig_t, adsbConfig, PG_ADSB_CONFIG, 0);
+
+PG_RESET_TEMPLATE(adsbConfig_t, adsbConfig,
+    .maxDistHorizM = 50000, // 50 km
+    .maxDistVertM  = 2000,  // 2 km above us
+    .detectionCone = 2000,  // +/-10 degrees
+    .toaSeconds    = 60,
+);
+
+// Our own altitude (ASL, cm) from the fused estimate: home altitude (ASL) plus the
+// baro/GPS/accel altitude estimate relative to home. Falls back to raw GPS if no home.
+static int32_t ourAltitudeAslCm(void)
+{
+    if (STATE(GPS_FIX_HOME)) {
+        return GPS_home_llh.altCm + getEstimatedAltitudeCm();
+    }
+    return gpsSol.llh.altCm;
+}
 
 // Slots for tracked aircraft. Slot 0..ADSB_MAX_VEHICLES-1; a ttl of 0 means the slot is free.
 static adsbVehicle_t vehiclesList[ADSB_MAX_VEHICLES];
@@ -135,8 +160,8 @@ void recalculateVehicle(adsbVehicle_t *vehicle)
 
     vehicle->calculatedVehicleValues.dist = dist;
     vehicle->calculatedVehicleValues.dir = bearing; // centidegrees, clockwise from North
-    // ADSB altitude is mm ASL; our GPS altitude is cm ASL. Convert both to cm.
-    vehicle->calculatedVehicleValues.verticalDistance = (vehicle->vehicleValues.alt / 10) - gpsSol.llh.altCm;
+    // ADSB altitude is mm ASL; our fused altitude is cm ASL. Positive = aircraft above us.
+    vehicle->calculatedVehicleValues.verticalDistance = (vehicle->vehicleValues.alt / 10) - ourAltitudeAslCm();
 
     if (dist > ADSB_LIMIT_CM) {
         vehicle->ttl = 0;
@@ -197,6 +222,9 @@ void adsbNewVehicle(adsbVehicleValues_t *vehicleValues)
 
     if (slot) {
         slot->vehicleValues = *vehicleValues;
+        if (!(vehicleValues->flags & ADSB_FLAGS_VALID_CALLSIGN)) {
+            memset(slot->vehicleValues.callsign, 0, sizeof(slot->vehicleValues.callsign)); // avoid showing junk
+        }
         slot->ttl = ADSB_MAX_SECONDS_KEEP_INACTIVE_PLANE_IN_LIST;
         recalculateVehicle(slot);
     }
@@ -234,6 +262,80 @@ void adsbTtlClean(timeUs_t currentTimeUs)
             recalculateVehicle(&vehiclesList[i]);
         }
     }
+}
+
+// Passes the configured display limits: within the horizontal distance, and not more than
+// maxDistVertM ABOVE us (traffic at or below our altitude is always shown).
+static bool vehicleWithinDisplayLimits(const adsbVehicle_t *vehicle)
+{
+    if (vehicle->calculatedVehicleValues.dist > (uint32_t)adsbConfig()->maxDistHorizM * 100) {
+        return false;
+    }
+    if (vehicle->calculatedVehicleValues.verticalDistance > (int32_t)adsbConfig()->maxDistVertM * 100) {
+        return false;
+    }
+    return true;
+}
+
+adsbVehicle_t *findVehicleClosestForDisplay(void)
+{
+    adsbVehicle_t *closest = NULL;
+    for (int i = 0; i < ADSB_MAX_VEHICLES; i++) {
+        adsbVehicle_t *vehicle = &vehiclesList[i];
+        if (vehicle->ttl == 0 || !vehicle->calculatedVehicleValues.valid || !vehicleWithinDisplayLimits(vehicle)) {
+            continue;
+        }
+        if (!closest || vehicle->calculatedVehicleValues.dist < closest->calculatedVehicleValues.dist) {
+            closest = vehicle;
+        }
+    }
+    return closest;
+}
+
+uint8_t getVehiclesInDisplayRangeCount(void)
+{
+    uint8_t count = 0;
+    for (int i = 0; i < ADSB_MAX_VEHICLES; i++) {
+        adsbVehicle_t *vehicle = &vehiclesList[i];
+        if (vehicle->ttl > 0 && vehicle->calculatedVehicleValues.valid && vehicleWithinDisplayLimits(vehicle)) {
+            count++;
+        }
+    }
+    return count;
+}
+
+bool adsbCriticalThreatDetected(void)
+{
+    for (int i = 0; i < ADSB_MAX_VEHICLES; i++) {
+        const adsbVehicle_t *vehicle = &vehiclesList[i];
+        if (vehicle->ttl == 0 || !vehicle->calculatedVehicleValues.valid) {
+            continue;
+        }
+        // c) aircraft not higher than our altitude + maxDistVertM (below us is always included)
+        if (vehicle->calculatedVehicleValues.verticalDistance >= (int32_t)adsbConfig()->maxDistVertM * 100) {
+            continue;
+        }
+        // b) time-to-arrival = distance / ground speed, must be within toaSeconds
+        if (vehicle->vehicleValues.horVelocity == 0) {
+            continue;
+        }
+        const uint32_t timeToArrival = vehicle->calculatedVehicleValues.dist / vehicle->vehicleValues.horVelocity;
+        if (timeToArrival > adsbConfig()->toaSeconds) {
+            continue;
+        }
+        // a) the aircraft is heading toward us: its course is within +/-(cone/2) of the reciprocal
+        //    of the bearing from us to it (dir + 180 deg).
+        int32_t headingError = (int32_t)vehicle->vehicleValues.heading - (vehicle->calculatedVehicleValues.dir + 18000);
+        headingError = ((headingError % 36000) + 36000) % 36000; // wrap to [0, 36000)
+        if (headingError > 18000) {
+            headingError -= 36000;                                // wrap to [-18000, 18000)
+        }
+        if (ABS(headingError) > adsbConfig()->detectionCone / 2) {
+            continue;
+        }
+        return true;
+    }
+    return false;
 }
 
 #endif // USE_ADSB

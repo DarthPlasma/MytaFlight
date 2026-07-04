@@ -69,6 +69,7 @@
 #include "io/beeper.h"
 #include "io/dashboard.h"
 #include "io/gimbal.h"
+#include "io/adsb.h"
 #include "io/gps.h"
 #include "io/ledstrip.h"
 #include "io/serial.h"
@@ -1594,6 +1595,10 @@ const clivalue_t valueTable[] = {
 #ifdef USE_ADSB
     { "osd_adsb_warning_pos",       VAR_UINT16  | MASTER_VALUE, .config.minmaxUnsigned = { 0, OSD_POSCFG_MAX }, PG_OSD_ELEMENT_CONFIG, offsetof(osdElementConfig_t, item_pos[OSD_ADSB_WARNING]) },
     { "osd_adsb_info_pos",          VAR_UINT16  | MASTER_VALUE, .config.minmaxUnsigned = { 0, OSD_POSCFG_MAX }, PG_OSD_ELEMENT_CONFIG, offsetof(osdElementConfig_t, item_pos[OSD_ADSB_INFO]) },
+    { "adsb_max_dist_horiz",        VAR_UINT16  | MASTER_VALUE, .config.minmaxUnsigned = { 0, UINT16_MAX }, PG_ADSB_CONFIG, offsetof(adsbConfig_t, maxDistHorizM) },
+    { "adsb_max_dist_vert",         VAR_UINT16  | MASTER_VALUE, .config.minmaxUnsigned = { 0, UINT16_MAX }, PG_ADSB_CONFIG, offsetof(adsbConfig_t, maxDistVertM) },
+    { "adsb_detection_cone",        VAR_UINT16  | MASTER_VALUE, .config.minmaxUnsigned = { 0, 18000 }, PG_ADSB_CONFIG, offsetof(adsbConfig_t, detectionCone) },
+    { "adsb_aircraft_toa",          VAR_UINT16  | MASTER_VALUE, .config.minmaxUnsigned = { 0, UINT16_MAX }, PG_ADSB_CONFIG, offsetof(adsbConfig_t, toaSeconds) },
 #endif
     { "osd_flight_dist_pos",        VAR_UINT16  | MASTER_VALUE, .config.minmaxUnsigned = { 0, OSD_POSCFG_MAX }, PG_OSD_ELEMENT_CONFIG, offsetof(osdElementConfig_t, item_pos[OSD_FLIGHT_DIST]) },
     { "osd_compass_bar_pos",        VAR_UINT16  | MASTER_VALUE, .config.minmaxUnsigned = { 0, OSD_POSCFG_MAX }, PG_OSD_ELEMENT_CONFIG, offsetof(osdElementConfig_t, item_pos[OSD_COMPASS_BAR]) },
