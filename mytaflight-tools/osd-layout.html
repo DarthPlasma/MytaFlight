@@ -25,10 +25,11 @@
   .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:10px; }
   /* grid */
   #gridWrap { overflow:auto; border:1px solid var(--line); border-radius:6px; background:#000; padding:8px; }
-  #grid { display:grid; font-family:ui-monospace,Menlo,Consolas,monospace; font-size:13px; line-height:1; width:max-content; }
+  #grid { display:grid; font-family:ui-monospace,Menlo,Consolas,monospace; font-size:13px; line-height:1; width:max-content;
+          background-size:100% 100%; background-repeat:no-repeat; background-position:center; }
   .gc { width:15px; height:20px; display:flex; align-items:center; justify-content:center; color:#39424f;
-        background:var(--cell); border-right:1px solid #10141b; border-bottom:1px solid #10141b; user-select:none; cursor:crosshair; }
-  .gc.own { color:var(--own); background:#0d1826; } .gc.ovl { color:#fff; background:var(--ovl); }
+        background:transparent; border-right:1px solid rgba(255,255,255,.05); border-bottom:1px solid rgba(255,255,255,.05); user-select:none; cursor:crosshair; }
+  .gc.own { color:var(--own); background:rgba(13,24,38,.72); } .gc.ovl { color:#fff; background:rgba(255,93,93,.85); }
   .gc.sel { outline:1px solid var(--sel); outline-offset:-1px; }
   .gc:hover { background:#182234; }
   /* element list */
@@ -68,6 +69,13 @@
         </span>
         <label>Show profile</label>
         <select id="profile"><option value="1">1</option><option value="2">2</option><option value="3">3</option></select>
+      </div>
+      <div class="row">
+        <label>Background</label>
+        <input type="file" id="bgImage" accept="image/*">
+        <label>Dim</label>
+        <input type="range" id="bgDim" min="0" max="90" value="35" style="width:110px">
+        <button class="ghost" id="bgClear">Clear</button>
       </div>
       <div id="gridWrap"><div id="grid"></div></div>
       <p class="hint">Select an element on the right, then click a grid cell to move its top-left there. Red = overlap.</p>
@@ -249,6 +257,24 @@ $('grid').addEventListener('click', e=>{
 $('preset').onchange = ()=>{ $('customDims').style.display = $('preset').value==='custom'?'inline':'none'; render(); };
 $('cols').onchange = $('rows').onchange = render;
 $('profile').onchange = render;
+
+// Optional background image (e.g. a still from the FPV feed) to judge layout against real video.
+let bgDataUrl = null;
+function applyBg(){
+  const grid = $('grid');
+  if (!bgDataUrl) { grid.style.backgroundImage = 'none'; return; }
+  const dim = (+$('bgDim').value) / 100; // darken overlay so the OSD stays readable over the image
+  grid.style.backgroundImage = `linear-gradient(rgba(0,0,0,${dim}),rgba(0,0,0,${dim})), url("${bgDataUrl}")`;
+}
+$('bgImage').addEventListener('change', e=>{
+  const file = e.target.files && e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => { bgDataUrl = ev.target.result; applyBg(); };
+  reader.readAsDataURL(file);
+});
+$('bgDim').addEventListener('input', applyBg);
+$('bgClear').addEventListener('click', ()=>{ bgDataUrl = null; $('bgImage').value = ''; applyBg(); });
 $('parseBtn').onclick = ()=>parseCLI($('input').value);
 $('addBtn').onclick = ()=>addElement($('addName').value.trim());
 $('addName').addEventListener('keydown', e=>{ if(e.key==='Enter') addElement($('addName').value.trim()); });
