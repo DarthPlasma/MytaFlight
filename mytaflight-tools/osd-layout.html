@@ -41,6 +41,16 @@
   .del { background:transparent; color:var(--ovl); padding:2px 6px; font-weight:700; }
   .hint { color:var(--muted); font-size:12px; margin:6px 0 0; }
   code { background:var(--cellGrid); padding:1px 5px; border-radius:4px; }
+  /* element preview */
+  .osdprev { background:#070a0f; border:1px solid var(--line); border-radius:6px; padding:6px 10px; }
+  .pv { display:flex; justify-content:space-between; align-items:center; gap:10px; padding:5px 0; border-bottom:1px solid rgba(255,255,255,.04); }
+  .pv:last-child { border-bottom:0; }
+  .pv .lbl { color:var(--muted); font-size:12px; }
+  .pv .val { font-family:ui-monospace,Menlo,Consolas,monospace; font-size:16px; color:#bcd8ff; letter-spacing:.5px;
+             display:inline-flex; align-items:center; gap:1px; white-space:pre; }
+  .pv .val svg { display:inline-block; }
+  @keyframes osdblink { 0%,55%{opacity:1} 56%,100%{opacity:0} }
+  .pv .val.blink { animation: osdblink .8s steps(1,end) infinite; }
 </style>
 </head>
 <body>
@@ -59,6 +69,7 @@
           <option value="30,13">Analog NTSC — 30×13</option>
           <option value="50,18">HDZero — 50×18</option>
           <option value="53,20" selected>DJI O3/O4 — 53×20</option>
+          <option value="60,22">WTF-OS (DJI FPV) — 60×22</option>
           <option value="53,20b">Walksnail — 53×20</option>
           <option value="35,24">Walksnail (tall) — 35×24</option>
           <option value="custom">Custom…</option>
@@ -107,6 +118,12 @@
       </div>
       <div class="hint">Quick add: <a href="#" data-add="osd_battery_impedance_pos" class="qa">impedance</a> · <a href="#" data-add="osd_sag_comp_batt_pos" class="qa">sag&nbsp;voltage</a></div>
       <div id="elList" style="margin-top:10px"></div>
+    </div>
+
+    <div class="panel" style="margin-top:16px">
+      <h2>Element preview (examples)</h2>
+      <div id="preview" class="osdprev"></div>
+      <p class="hint">Approximate glyphs (the goggle's OSD font may differ). The alarm row blinks like the real OSD.</p>
     </div>
   </aside>
 </main>
@@ -296,6 +313,22 @@ function addElement(name){
   const el = { name, x:1, y:1, prof:[p===1,p===2,p===3], type:0 };
   elements.push(el); selected=name; $('addName').value=''; render();
 }
+
+// ---- element preview (approximate glyphs via inline SVG) ----
+const G_THERMO = '<svg width="9" height="15" viewBox="0 0 9 15" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linejoin="round"><path d="M4.5 1.6a1.6 1.6 0 0 0-1.6 1.6v5.9a3 3 0 1 0 3.2 0V3.2A1.6 1.6 0 0 0 4.5 1.6Z"/><circle cx="4.5" cy="11" r="1.5" fill="currentColor" stroke="none"/></svg>';
+const G_VOLT = '<svg width="8" height="14" viewBox="0 0 8 14" fill="currentColor"><path d="M4.9 0 0 8h2.9L2 14l6-8.6H4.2L4.9 0Z"/></svg>';
+function buildPreview(){
+  const rows = [
+    ['Battery temp',            'B'+G_THERMO+' 25°C', false],
+    ['— alarm (out of range)',  'B'+G_THERMO+' 65°C', true],
+    ['— sensor absent',         'B'+G_THERMO+'---°C', false],
+    ['Battery impedance',       '18mR', false],
+    ['Sag-comp voltage',        '16.8'+G_VOLT, false],
+  ];
+  $('preview').innerHTML = rows.map(([lbl,val,blink])=>
+    `<div class="pv"><span class="lbl">${lbl}</span><span class="val${blink?' blink':''}">${val}</span></div>`).join('');
+}
+buildPreview();
 
 render();
 </script>
