@@ -169,6 +169,7 @@
 
 // TODO TBC
 #define PG_DISPLAY_PORT_FBOSD_CONFIG 566
+#define PG_TEMPERATURE_SENSOR_CONFIG 567
 
 // OSD configuration (subject to change)
 #define PG_OSD_FONT_CONFIG 2047
