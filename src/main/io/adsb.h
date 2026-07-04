@@ -28,6 +28,8 @@
 
 #include "common/time.h"
 
+#include "pg/pg.h"
+
 #include "io/gps.h"
 
 #ifdef USE_ADSB
@@ -35,6 +37,15 @@
 #if !defined(USE_GPS)
 #error "USE_ADSB requires USE_GPS (own position is needed for distance/bearing)"
 #endif
+
+typedef struct adsbConfig_s {
+    uint16_t maxDistHorizM;   // hide the traffic warning beyond this horizontal distance (m)
+    uint16_t maxDistVertM;    // hide it beyond this height ABOVE us (m); traffic below us is always shown
+    uint16_t detectionCone;   // approach cone width for the critical warning (centidegrees, e.g. 2000 = +/-10 deg)
+    uint16_t toaSeconds;      // approach time-to-arrival threshold for the critical warning (s)
+} adsbConfig_t;
+
+PG_DECLARE(adsbConfig_t, adsbConfig);
 
 #define ADSB_CALL_SIGN_MAX_LENGTH 9
 #define ADSB_MAX_VEHICLES 5
@@ -83,5 +94,9 @@ adsbVehicleValues_t *getVehicleForFill(void);
 bool isEnvironmentOkForCalculatingADSBDistanceBearing(void);
 void recalculateVehicle(adsbVehicle_t *vehicle);
 const char *adsbEmitterTypeString(uint8_t emitterType); // short class label for a MAVLink ADSB_EMITTER_TYPE
+
+adsbVehicle_t *findVehicleClosestForDisplay(void);  // nearest vehicle passing the configured display limits
+uint8_t getVehiclesInDisplayRangeCount(void);       // active vehicles within the configured display limits
+bool adsbCriticalThreatDetected(void);              // an aircraft is approaching us (cone + ToA + vertical)
 
 #endif // USE_ADSB
