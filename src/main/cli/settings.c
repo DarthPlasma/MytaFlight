@@ -135,6 +135,7 @@
 #include "sensors/boardalignment.h"
 #include "sensors/compass.h"
 #include "sensors/esc_sensor.h"
+#include "sensors/temperature.h"
 #include "sensors/gyro.h"
 #include "sensors/rangefinder.h"
 #include "sensors/opticalflow.h"
@@ -821,6 +822,14 @@ const clivalue_t valueTable[] = {
     { "mag_spi_device",             VAR_UINT8  | HARDWARE_VALUE, .config.minmaxUnsigned = { 0, SPIDEV_COUNT }, PG_COMPASS_CONFIG, offsetof(compassConfig_t, mag_spi_device) },
     { PARAM_NAME_MAG_HARDWARE,      VAR_UINT8  | MASTER_VALUE | MODE_LOOKUP, .config.lookup = { TABLE_MAG_HARDWARE }, PG_COMPASS_CONFIG, offsetof(compassConfig_t, mag_hardware) },
     { "mag_calibration",            VAR_INT16  | MASTER_VALUE | MODE_ARRAY, .config.array.length = XYZ_AXIS_COUNT, PG_COMPASS_CONFIG, offsetof(compassConfig_t, magZero.raw) },
+#endif
+
+// PG_TEMPERATURE_SENSOR_CONFIG
+#if defined(USE_TEMPERATURE_SENSOR)
+    { "temp_sensor_i2c_device",     VAR_UINT8  | HARDWARE_VALUE, .config.minmaxUnsigned = { 0, I2CDEV_COUNT }, PG_TEMPERATURE_SENSOR_CONFIG, offsetof(temperatureSensorConfig_t, i2c_device) },
+    { "temp_sensor_i2c_address",    VAR_UINT8  | HARDWARE_VALUE, .config.minmaxUnsigned = { 0, I2C_ADDR7_MAX }, PG_TEMPERATURE_SENSOR_CONFIG, offsetof(temperatureSensorConfig_t, i2c_address) },
+    { "temp_sensor_alarm_min",      VAR_UINT8  | MASTER_VALUE, .config.minmaxUnsigned = { 0, 150 }, PG_TEMPERATURE_SENSOR_CONFIG, offsetof(temperatureSensorConfig_t, alarmMinC) },
+    { "temp_sensor_alarm_max",      VAR_UINT8  | MASTER_VALUE, .config.minmaxUnsigned = { 0, 150 }, PG_TEMPERATURE_SENSOR_CONFIG, offsetof(temperatureSensorConfig_t, alarmMaxC) },
 #endif
 
 // PG_BAROMETER_CONFIG
@@ -1641,6 +1650,9 @@ const clivalue_t valueTable[] = {
     { "osd_flip_arrow_pos",         VAR_UINT16  | MASTER_VALUE, .config.minmaxUnsigned = { 0, OSD_POSCFG_MAX }, PG_OSD_ELEMENT_CONFIG, offsetof(osdElementConfig_t, item_pos[OSD_FLIP_ARROW]) },
 #ifdef USE_ADC_INTERNAL
     { "osd_core_temp_pos",          VAR_UINT16  | MASTER_VALUE, .config.minmaxUnsigned = { 0, OSD_POSCFG_MAX }, PG_OSD_ELEMENT_CONFIG, offsetof(osdElementConfig_t, item_pos[OSD_CORE_TEMPERATURE]) },
+#endif
+#ifdef USE_TEMPERATURE_SENSOR
+    { "osd_battery_temp_pos",       VAR_UINT16  | MASTER_VALUE, .config.minmaxUnsigned = { 0, OSD_POSCFG_MAX }, PG_OSD_ELEMENT_CONFIG, offsetof(osdElementConfig_t, item_pos[OSD_BATTERY_TEMPERATURE]) },
 #endif
 #ifdef USE_BLACKBOX
     { "osd_log_status_pos",         VAR_UINT16  | MASTER_VALUE, .config.minmaxUnsigned = { 0, OSD_POSCFG_MAX }, PG_OSD_ELEMENT_CONFIG, offsetof(osdElementConfig_t, item_pos[OSD_LOG_STATUS]) },

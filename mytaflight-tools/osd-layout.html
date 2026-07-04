@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MyTAflight — OSD Layout Tool</title>
+<style>
+  :root { --bg:#12151c; --panel:#1b2029; --line:#2c333f; --fg:#e6e9ef; --muted:#8b93a3;
+          --accent:#4ea1ff; --cell:#0c0f15; --cellGrid:#1f2530; --own:#a7c7ff; --ovl:#ff5d5d; --sel:#ffd23f; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:14px/1.4 -apple-system,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--fg); }
+  header { padding:14px 18px; border-bottom:1px solid var(--line); }
+  header h1 { margin:0; font-size:16px; } header p { margin:4px 0 0; color:var(--muted); font-size:12px; }
+  main { display:grid; grid-template-columns:1fr 340px; gap:16px; padding:16px; align-items:start; }
+  @media (max-width:900px){ main{ grid-template-columns:1fr; } }
+  .panel { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:12px; }
+  .panel h2 { margin:0 0 10px; font-size:13px; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; }
+  label { color:var(--muted); font-size:12px; } select,input,button,textarea { font-family:inherit; }
+  select,input[type=number],input[type=text] { background:var(--cell); color:var(--fg); border:1px solid var(--line);
+     border-radius:5px; padding:5px 7px; }
+  input[type=number]{ width:58px; } button { background:var(--accent); color:#04101f; border:0; border-radius:5px;
+     padding:6px 11px; cursor:pointer; font-weight:600; } button.ghost{ background:var(--cellGrid); color:var(--fg); }
+  button:hover{ filter:brightness(1.08); } textarea { width:100%; background:var(--cell); color:var(--fg);
+     border:1px solid var(--line); border-radius:6px; padding:9px; resize:vertical; font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12px; }
+  .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:10px; }
+  /* grid */
+  #gridWrap { overflow:auto; border:1px solid var(--line); border-radius:6px; background:#000; padding:8px; }
+  #grid { display:grid; font-family:ui-monospace,Menlo,Consolas,monospace; font-size:13px; line-height:1; width:max-content;
+          background-size:100% 100%; background-repeat:no-repeat; background-position:center; }
+  .gc { width:15px; height:20px; display:flex; align-items:center; justify-content:center; color:#39424f;
+        background:transparent; border-right:1px solid rgba(255,255,255,.05); border-bottom:1px solid rgba(255,255,255,.05); user-select:none; cursor:crosshair; }
+  .gc.own { color:var(--own); background:rgba(13,24,38,.72); } .gc.ovl { color:#fff; background:rgba(255,93,93,.85); }
+  .gc.sel { outline:1px solid var(--sel); outline-offset:-1px; }
+  .gc:hover { background:#182234; }
+  /* element list */
+  .el { border:1px solid var(--line); border-radius:6px; padding:8px; margin-bottom:8px; }
+  .el.selected { border-color:var(--sel); box-shadow:0 0 0 1px var(--sel) inset; }
+  .el .name { font-family:ui-monospace,monospace; font-size:12px; color:var(--accent); cursor:pointer; word-break:break-all; }
+  .el .ctrls { display:flex; gap:8px; align-items:center; margin-top:6px; flex-wrap:wrap; }
+  .chk { display:flex; gap:3px; align-items:center; color:var(--muted); font-size:12px; }
+  .del { background:transparent; color:var(--ovl); padding:2px 6px; font-weight:700; }
+  .hint { color:var(--muted); font-size:12px; margin:6px 0 0; }
+  code { background:var(--cellGrid); padding:1px 5px; border-radius:4px; }
+  /* element preview */
+  .osdprev { background:#070a0f; border:1px solid var(--line); border-radius:6px; padding:6px 10px; }
+  .pv { display:flex; justify-content:space-between; align-items:center; gap:10px; padding:5px 0; border-bottom:1px solid rgba(255,255,255,.04); }
+  .pv:last-child { border-bottom:0; }
+  .pv .lbl { color:var(--muted); font-size:12px; }
+  .pv .val { font-family:ui-monospace,Menlo,Consolas,monospace; font-size:16px; color:#bcd8ff; letter-spacing:.5px;
+             display:inline-flex; align-items:center; gap:1px; white-space:pre; }
+  .pv .val svg { display:inline-block; }
+  @keyframes osdblink { 0%,55%{opacity:1} 56%,100%{opacity:0} }
+  .pv .val.blink { animation: osdblink .8s steps(1,end) infinite; }
+</style>
+</head>
+<body>
+<header>
+  <h1>MyTAflight — OSD Layout Tool</h1>
+  <p>Paste a Betaflight <code>diff</code> / <code>dump</code>, arrange elements visually, copy the <code>set&nbsp;osd_*_pos</code> lines back into the CLI. Encoding matches osd.h (X is 6-bit / HD-aware; profile &amp; type bits preserved).</p>
+</header>
+
+<main>
+  <section>
+    <div class="panel">
+      <div class="row">
+        <label>Video system</label>
+        <select id="preset">
+          <option value="30,16">Analog PAL — 30×16</option>
+          <option value="30,13">Analog NTSC — 30×13</option>
+          <option value="50,18">HDZero — 50×18</option>
+          <option value="53,20" selected>DJI O3/O4 — 53×20</option>
+          <option value="60,22">WTF-OS (DJI FPV) — 60×22</option>
+          <option value="53,20b">Walksnail — 53×20</option>
+          <option value="35,24">Walksnail (tall) — 35×24</option>
+          <option value="custom">Custom…</option>
+        </select>
+        <span id="customDims" style="display:none">
+          <label>cols</label><input type="number" id="cols" min="1" max="64" value="53">
+          <label>rows</label><input type="number" id="rows" min="1" max="32" value="20">
+        </span>
+        <label>Show profile</label>
+        <select id="profile"><option value="1">1</option><option value="2">2</option><option value="3">3</option></select>
+      </div>
+      <div class="row">
+        <label>Background</label>
+        <input type="file" id="bgImage" accept="image/*">
+        <label>Dim</label>
+        <input type="range" id="bgDim" min="0" max="90" value="35" style="width:110px">
+        <button class="ghost" id="bgClear">Clear</button>
+      </div>
+      <div id="gridWrap"><div id="grid"></div></div>
+      <p class="hint">Select an element on the right, then click a grid cell to move its top-left there. Red = overlap.</p>
+    </div>
+
+    <div class="panel" style="margin-top:16px">
+      <h2>Paste CLI (diff / dump)</h2>
+      <textarea id="input" rows="6" placeholder="set osd_vbat_pos = 2465&#10;set osd_craft_name_pos = 2081&#10;..."></textarea>
+      <div class="row" style="margin-top:8px">
+        <button id="parseBtn">Parse</button>
+        <button class="ghost" id="loadSample">Load sample</button>
+      </div>
+    </div>
+  </section>
+
+  <aside>
+    <div class="panel">
+      <h2>Output — paste into CLI</h2>
+      <textarea id="output" rows="8" readonly></textarea>
+      <div class="row" style="margin-top:8px"><button id="copyBtn">Copy</button></div>
+    </div>
+
+    <div class="panel" style="margin-top:16px">
+      <h2>Elements</h2>
+      <div class="row">
+        <input type="text" id="addName" placeholder="osd_..._pos" list="known" style="flex:1">
+        <datalist id="known"></datalist>
+        <button id="addBtn">Add</button>
+      </div>
+      <div class="hint">Quick add: <a href="#" data-add="osd_battery_impedance_pos" class="qa">impedance</a> · <a href="#" data-add="osd_sag_comp_batt_pos" class="qa">sag&nbsp;voltage</a></div>
+      <div id="elList" style="margin-top:10px"></div>
+    </div>
+
+    <div class="panel" style="margin-top:16px">
+      <h2>Element preview (examples)</h2>
+      <div id="preview" class="osdprev"></div>
+      <p class="hint">Approximate glyphs (the goggle's OSD font may differ). The alarm row blinks like the real OSD.</p>
+    </div>
+  </aside>
+</main>
+
+<script>
+/* ---- Betaflight OSD position encoding (authoritative, from src/main/osd/osd.h) ----
+   bits 0-4  : low 5 bits of X (column)
+   bits 5-9  : Y (row) 0-31
+   bit  10   : high bit of X (HD extension) -> X range 0-63
+   bits 11-13: OSD profile visibility flags (1/2/3)
+   bits 14-15: OSD_TYPE (element render variant) -> preserved untouched
+*/
+const XY = 0x1F, XHD = 0x400, PROF = 11, TYPE_MASK = 0xC000;
+const decodeX = v => (v & XY) | ((v & XHD) >> 5);
+const decodeY = v => (v >> 5) & XY;
+const encode = (x, y, profFlags, typeBits) =>
+  ((x & XY) | ((x & 0x20) << 5) | ((y & XY) << 5) | (profFlags & 0x3800) | (typeBits & TYPE_MASK)) >>> 0;
+const profFlag = p => 1 << (PROF + p - 1);
+
+// Representative sample strings so footprints/overlaps are visible. Unknown -> label from name.
+// OSD glyphs approximated as inline SVG. Full fidelity would need the goggle's own OSD font
+// (256 glyphs, lives on the display side), so symbols are approximated; text values are exact.
+const GLYPH_SVG = {
+  thermo:'<svg width="9" height="15" viewBox="0 0 9 15" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linejoin="round"><path d="M4.5 1.6a1.6 1.6 0 0 0-1.6 1.6v5.9a3 3 0 1 0 3.2 0V3.2A1.6 1.6 0 0 0 4.5 1.6Z"/><circle cx="4.5" cy="11" r="1.5" fill="currentColor" stroke="none"/></svg>',
+  volt:'<svg width="8" height="14" viewBox="0 0 8 14" fill="currentColor"><path d="M4.9 0 0 8h2.9L2 14l6-8.6H4.2L4.9 0Z"/></svg>',
+  batt:'<svg width="14" height="9" viewBox="0 0 14 9" fill="none" stroke="currentColor" stroke-width="1"><rect x="0.5" y="0.5" width="11" height="8" rx="1"/><rect x="12" y="3" width="2" height="3" fill="currentColor" stroke="none"/><rect x="2" y="2" width="6" height="5" fill="currentColor" stroke="none"/></svg>',
+  degc:'<svg width="12" height="14" viewBox="0 0 12 14" fill="none" stroke="currentColor" stroke-width="1.1"><circle cx="2.6" cy="3" r="1.5"/><path d="M10.6 4.4a4.2 4.2 0 1 0 0 5.2"/></svg>',
+  amp:'<svg width="10" height="14" viewBox="0 0 10 14" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round"><path d="M1 13 5 1l4 12M2.5 9h5"/></svg>',
+  sat:'<svg width="14" height="12" viewBox="0 0 14 12" fill="currentColor"><g transform="rotate(45 7 6)"><rect x="5.5" y="4.5" width="3" height="3"/><rect x="1.2" y="5" width="3.3" height="2"/><rect x="9.5" y="5" width="3.3" height="2"/></g></svg>',
+  home:'<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1" stroke-linejoin="round"><path d="M1 5.5 6 1l5 4.5M2.5 5V10.5h7V5"/></svg>',
+  arrow:'<svg width="11" height="13" viewBox="0 0 11 13" fill="currentColor"><path d="M5.5 0 10 5.5H7V13H4V5.5H1z"/></svg>',
+  alt:'<svg width="11" height="14" viewBox="0 0 11 14" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linejoin="round" stroke-linecap="round"><path d="M5.5 2v8.5M2.6 4.9 5.5 2l2.9 2.9M1 12.5h9"/></svg>',
+};
+// single-cell glyph markers embedded in sample strings (private-use code points, 1 char = 1 cell)
+const GT='', GV='', GB='', GD='', GA='';
+const GS='', GH='', GR='', GL='';
+const GLYPHS = { [GT]:GLYPH_SVG.thermo, [GV]:GLYPH_SVG.volt, [GB]:GLYPH_SVG.batt, [GD]:GLYPH_SVG.degc, [GA]:GLYPH_SVG.amp,
+                 [GS]:GLYPH_SVG.sat, [GH]:GLYPH_SVG.home, [GR]:GLYPH_SVG.arrow, [GL]:GLYPH_SVG.alt };
+
+const SAMPLES = {
+  osd_vbat_pos: GB+"16.8"+GV, osd_sag_comp_batt_pos:"16.8"+GV, osd_avg_cell_voltage_pos: GB+"4.20"+GV,
+  osd_battery_impedance_pos:"  18mR", osd_battery_temp_pos:"B"+GT+" 45"+GD, osd_rssi_pos:"RSS99", osd_link_quality_pos:"LQ:99",
+  osd_craft_name_pos:"CRAFTNAME", osd_current_pos:"12.4"+GA, osd_mah_drawn_pos:"1234mAh",
+  osd_power_pos:"210W", osd_altitude_pos: GL+"12.3m", osd_gps_speed_pos:"45",
+  osd_gps_sats_pos: GS+"12", osd_gps_lat_pos:"47.1234", osd_gps_lon_pos:" 9.5678",
+  osd_home_dir_pos: GR, osd_home_dist_pos: GH+"120m", osd_flight_dist_pos:"1.2km",
+  osd_nheading_pos: GR+"120", osd_nvario_pos:"1.5", osd_efficiency_pos:"210",
+  osd_core_temp_pos:"C"+GT+" 45"+GD, osd_esc_tmp_pos:"E"+GT+" 45"+GD, osd_g_force_pos:"1.2G",
+  osd_pit_ang_pos:"P-4.5°", osd_rol_ang_pos:"R 2.3°",
+  osd_adsb_warning_pos: GR+"2.3km +150", osd_adsb_info_pos: GR+"LARGE 250kmh PEGASO1", osd_adsb_status_pos:"A5/2",
+  osd_compass_bar_pos:"──N─┃─E──", osd_flymode_pos:"ANGL", osd_throttle_pos:"35%", osd_warnings_pos:"LAND NOW",
+};
+
+// Multi-cell (graphic/background) elements: relative cells [{dx,dy,ch}] instead of a single-row string.
+// Box-drawing chars render reliably in monospace; shapes are representative for layout, not pixel-exact.
+// Anchor semantics follow Betaflight's draw code (offsets relative to the stored position).
+const MULTICELL = {
+  osd_crosshairs_pos: () => [{dx:0,dy:0,ch:'─'},{dx:1,dy:0,ch:'┼'},{dx:2,dy:0,ch:'─'}], // 3 wide, left-anchored
+  osd_ah_pos: () => {                    // artificial horizon: 9 wide centred on X; level line ~4 rows below anchor
+    const cells=[]; for(let dx=-4; dx<=4; dx++) cells.push({dx, dy:4, ch:'─'}); return cells;
+  },
+  osd_ah_sbar_pos: () => {               // side bars: anchor is the CENTRE; bars at +/-7 cols, rows +/-3
+    const W=7, H=3, cells=[];
+    for(let dy=-H; dy<=H; dy++){ cells.push({dx:-W,dy,ch:'│'}); cells.push({dx:W,dy,ch:'│'}); }
+    cells.push({dx:-W+1,dy:0,ch:'›'}); cells.push({dx:W-1,dy:0,ch:'‹'}); // inward level markers
+    return cells;
+  },
+};
+// Cells occupied by an element, relative to its (x,y): multi-cell shape or one row of the sample string.
+function elementCells(el){
+  if (MULTICELL[el.name]) return MULTICELL[el.name](el);
+  return [...sampleFor(el.name)].map((ch,i)=>({dx:i, dy:0, ch}));
+}
+function sampleFor(name){
+  if (SAMPLES[name]) return SAMPLES[name];
+  return name.replace(/^osd_/,'').replace(/_pos$/,'').toUpperCase().slice(0,12) || "EL";
+}
+
+let elements = [];   // { name, x, y, prof:[b,b,b], type }
+let selected = null; // name
+let COLS = 53, ROWS = 20;
+
+const $ = id => document.getElementById(id);
+
+function readDims(){
+  const p = $('preset').value;
+  if (p === 'custom'){ COLS = clamp(+$('cols').value,1,64); ROWS = clamp(+$('rows').value,1,32); }
+  else { const [c,r] = p.split(','); COLS = +c; ROWS = parseInt(r,10); }
+}
+const clamp = (v,a,b)=>Math.max(a,Math.min(b,v|0));
+
+function parseCLI(text){
+  const re = /(?:set\s+)?(osd_[a-z0-9_]*?_pos)\s*=\s*(\d+)/gi;
+  const found = {}; let m;
+  while ((m = re.exec(text)) !== null){
+    const name = m[1].toLowerCase(), v = (+m[2]) >>> 0;
+    found[name] = mkElement(name, v);
+  }
+  const list = Object.values(found);
+  if (list.length) { elements = list; selected = null; render(); }
+  else alert("No osd_*_pos lines found in the pasted text.");
+}
+function mkElement(name, v){
+  return { name, x:decodeX(v), y:decodeY(v),
+           prof:[!!(v&profFlag(1)), !!(v&profFlag(2)), !!(v&profFlag(3))], type:v & TYPE_MASK };
+}
+function valueOf(el){
+  const pf = (el.prof[0]?profFlag(1):0)|(el.prof[1]?profFlag(2):0)|(el.prof[2]?profFlag(3):0);
+  return encode(el.x, el.y, pf, el.type);
+}
+
+function render(){ readDims(); renderGrid(); renderList(); renderOutput(); syncDatalist(); }
+
+function renderGrid(){
+  const prof = +$('profile').value;
+  const grid = $('grid');
+  grid.style.gridTemplateColumns = `repeat(${COLS}, 15px)`;
+  // owner map
+  const owner = Array.from({length:ROWS},()=>Array(COLS).fill(null));
+  const ovl = Array.from({length:ROWS},()=>Array(COLS).fill(false));
+  for (const el of elements){
+    if (!el.prof[prof-1]) continue;
+    for (const c of elementCells(el)){
+      const cx = el.x + c.dx, cy = el.y + c.dy;
+      if (cx<0||cx>=COLS||cy<0||cy>=ROWS) continue;
+      if (owner[cy][cx] !== null && owner[cy][cx].name !== el.name) ovl[cy][cx] = true; // only cross-element overlaps
+      owner[cy][cx] = { name:el.name, ch:c.ch };
+    }
+  }
+  let html = '';
+  for (let y=0;y<ROWS;y++) for (let x=0;x<COLS;x++){
+    const o = owner[y][x]; const isSel = o && o.name===selected;
+    const cls = 'gc' + (o? (ovl[y][x]?' ovl':' own'):'') + (isSel?' sel':'');
+    const content = !o ? '·' : (GLYPHS[o.ch] || escapeHtml(o.ch));
+    html += `<div class="${cls}" data-x="${x}" data-y="${y}">${content}</div>`;
+  }
+  grid.innerHTML = html;
+}
+const escapeHtml = c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]||c);
+
+function renderList(){
+  const wrap = $('elList');
+  const prof = +$('profile').value;
+  wrap.innerHTML = '';
+  elements.slice().sort((a,b)=>a.name.localeCompare(b.name)).forEach(el=>{
+    const div = document.createElement('div');
+    div.className = 'el' + (el.name===selected?' selected':'');
+    div.innerHTML =
+      `<div class="name">${el.name}</div>
+       <div class="ctrls">
+         <label>X</label><input type="number" min="0" max="63" value="${el.x}" data-f="x">
+         <label>Y</label><input type="number" min="0" max="31" value="${el.y}" data-f="y">
+         <span class="chk"><input type="checkbox" data-f="p1" ${el.prof[0]?'checked':''}>1</span>
+         <span class="chk"><input type="checkbox" data-f="p2" ${el.prof[1]?'checked':''}>2</span>
+         <span class="chk"><input type="checkbox" data-f="p3" ${el.prof[2]?'checked':''}>3</span>
+         <button class="del" title="remove">×</button>
+       </div>`;
+    div.querySelector('.name').onclick = ()=>{ selected = (selected===el.name?null:el.name); render(); };
+    div.querySelectorAll('input').forEach(inp=>{
+      inp.onchange = ()=>{
+        const f = inp.dataset.f;
+        if (f==='x') el.x = clamp(+inp.value,0,63);
+        else if (f==='y') el.y = clamp(+inp.value,0,31);
+        else if (f==='p1') el.prof[0]=inp.checked;
+        else if (f==='p2') el.prof[1]=inp.checked;
+        else if (f==='p3') el.prof[2]=inp.checked;
+        render();
+      };
+    });
+    div.querySelector('.del').onclick = ()=>{ elements = elements.filter(e=>e!==el); if(selected===el.name) selected=null; render(); };
+    if (!el.prof[prof-1]) div.style.opacity = .55;
+    wrap.appendChild(div);
+  });
+}
+
+function renderOutput(){
+  $('output').value = elements.slice().sort((a,b)=>a.name.localeCompare(b.name))
+    .map(el=>`set ${el.name} = ${valueOf(el)}`).join('\n');
+}
+function syncDatalist(){
+  $('known').innerHTML = [...Object.keys(SAMPLES), ...Object.keys(MULTICELL)].map(n=>`<option value="${n}">`).join('');
+}
+
+// ---- interactions ----
+$('grid').addEventListener('click', e=>{
+  const c = e.target.closest('.gc'); if(!c||!selected) return;
+  const el = elements.find(x=>x.name===selected); if(!el) return;
+  el.x = +c.dataset.x; el.y = +c.dataset.y;
+  // ensure it's visible in the profile you're viewing, so you see the move
+  const p = +$('profile').value; el.prof[p-1] = true;
+  render();
+});
+$('preset').onchange = ()=>{ $('customDims').style.display = $('preset').value==='custom'?'inline':'none'; render(); };
+$('cols').onchange = $('rows').onchange = render;
+$('profile').onchange = render;
+
+// Optional background image (e.g. a still from the FPV feed) to judge layout against real video.
+let bgDataUrl = null;
+function applyBg(){
+  const grid = $('grid');
+  if (!bgDataUrl) { grid.style.backgroundImage = 'none'; return; }
+  const dim = (+$('bgDim').value) / 100; // darken overlay so the OSD stays readable over the image
+  grid.style.backgroundImage = `linear-gradient(rgba(0,0,0,${dim}),rgba(0,0,0,${dim})), url("${bgDataUrl}")`;
+}
+$('bgImage').addEventListener('change', e=>{
+  const file = e.target.files && e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => { bgDataUrl = ev.target.result; applyBg(); };
+  reader.readAsDataURL(file);
+});
+$('bgDim').addEventListener('input', applyBg);
+$('bgClear').addEventListener('click', ()=>{ bgDataUrl = null; $('bgImage').value = ''; applyBg(); });
+$('parseBtn').onclick = ()=>parseCLI($('input').value);
+$('addBtn').onclick = ()=>addElement($('addName').value.trim());
+$('addName').addEventListener('keydown', e=>{ if(e.key==='Enter') addElement($('addName').value.trim()); });
+document.querySelectorAll('.qa').forEach(a=>a.onclick = e=>{ e.preventDefault(); addElement(a.dataset.add); });
+$('copyBtn').onclick = ()=>{ $('output').select(); document.execCommand('copy'); $('copyBtn').textContent='Copied!'; setTimeout(()=>$('copyBtn').textContent='Copy',1200); };
+$('loadSample').onclick = ()=>{ $('input').value =
+`set osd_craft_name_pos = 2081
+set osd_vbat_pos = 2465
+set osd_avg_cell_voltage_pos = 2529
+set osd_rssi_pos = 2072
+set osd_flymode_pos = 2413`; parseCLI($('input').value); };
+
+function addElement(name){
+  if(!name) return;
+  if(!/^osd_[a-z0-9_]*_pos$/i.test(name)){ alert("Name must look like osd_..._pos"); return; }
+  name = name.toLowerCase();
+  if(elements.some(e=>e.name===name)){ selected=name; render(); return; }
+  const p = +$('profile').value;
+  const el = { name, x:1, y:1, prof:[p===1,p===2,p===3], type:0 };
+  elements.push(el); selected=name; $('addName').value=''; render();
+}
+
+// ---- element preview (approximate glyphs via inline SVG) ----
+function buildPreview(){
+  const T = GLYPH_SVG.thermo, V = GLYPH_SVG.volt, D = GLYPH_SVG.degc;
+  const rows = [
+    ['Battery temp',            'B'+T+' 25'+D, false],
+    ['— alarm (out of range)',  'B'+T+' 65'+D, true],
+    ['— sensor absent',         'B'+T+'---'+D, false],
+    ['Battery impedance',       '18mR', false],
+    ['Sag-comp voltage',        '16.8'+V, false],
+  ];
+  $('preview').innerHTML = rows.map(([lbl,val,blink])=>
+    `<div class="pv"><span class="lbl">${lbl}</span><span class="val${blink?' blink':''}">${val}</span></div>`).join('');
+}
+buildPreview();
+
+render();
+</script>
+</body>
+</html>

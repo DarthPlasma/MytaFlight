@@ -180,6 +180,7 @@
 #include "sensors/barometer.h"
 #include "sensors/battery.h"
 #include "sensors/sensors.h"
+#include "sensors/temperature.h"
 #include "sensors/rangefinder.h"
 
 #ifdef USE_GPS_PLUS_CODES
@@ -906,6 +907,19 @@ static void osdElementCoreTemperature(osdElementParms_t *element)
     tfp_sprintf(element->buff, "C%c%3d%c", SYM_TEMPERATURE, osdConvertTemperatureToSelectedUnit(getCoreTemperatureCelsius()), osdGetTemperatureSymbolForSelectedUnit());
 }
 #endif // USE_ADC_INTERNAL
+
+#ifdef USE_TEMPERATURE_SENSOR
+static void osdElementBatteryTemperature(osdElementParms_t *element)
+{
+    if (!temperatureSensorIsPresent()) {
+        // Sensor absent: show dashes rather than a bogus value. Alarm blink is handled in osdUpdateAlarms().
+        tfp_sprintf(element->buff, "B%c---%c", SYM_TEMPERATURE, SYM_C);
+        return;
+    }
+
+    tfp_sprintf(element->buff, "B%c%3d%c", SYM_TEMPERATURE, getTemperatureSensorDeciDegrees() / 10, SYM_C);
+}
+#endif // USE_TEMPERATURE_SENSOR
 
 static void osdBackgroundCameraFrame(osdElementParms_t *element)
 {
@@ -1985,6 +1999,9 @@ static const uint8_t osdElementDisplayOrder[] = {
 #ifdef USE_ADC_INTERNAL
     OSD_CORE_TEMPERATURE,
 #endif
+#ifdef USE_TEMPERATURE_SENSOR
+    OSD_BATTERY_TEMPERATURE,
+#endif
 #ifdef USE_RX_LINK_QUALITY_INFO
     OSD_LINK_QUALITY,
 #endif
@@ -2114,6 +2131,9 @@ const osdElementDrawFn osdElementDrawFunction[OSD_ITEM_COUNT] = {
 #endif
 #ifdef USE_ADC_INTERNAL
     [OSD_CORE_TEMPERATURE]        = osdElementCoreTemperature,
+#endif
+#ifdef USE_TEMPERATURE_SENSOR
+    [OSD_BATTERY_TEMPERATURE]     = osdElementBatteryTemperature,
 #endif
     [OSD_ANTI_GRAVITY]            = osdElementAntiGravity,
 #ifdef USE_ACC
@@ -2597,6 +2617,18 @@ void osdUpdateAlarms(void)
         SET_BLINK(OSD_MAIN_BATT_VOLTAGE);
         SET_BLINK(OSD_AVG_CELL_VOLTAGE);
     }
+
+#ifdef USE_TEMPERATURE_SENSOR
+    // Blink the battery temperature when out of the configured range: !(Tlow < T < Thigh).
+    // Absent sensor shows dashes and does not blink.
+    if (temperatureSensorIsPresent()
+        && (getTemperatureSensorDeciDegrees() <= temperatureSensorConfig()->alarmMinC * 10
+            || getTemperatureSensorDeciDegrees() >= temperatureSensorConfig()->alarmMaxC * 10)) {
+        SET_BLINK(OSD_BATTERY_TEMPERATURE);
+    } else {
+        CLR_BLINK(OSD_BATTERY_TEMPERATURE);
+    }
+#endif
 
 #ifdef USE_GPS
     if ((STATE(GPS_FIX) == 0) || (gpsSol.numSat < GPS_MIN_SAT_COUNT)
