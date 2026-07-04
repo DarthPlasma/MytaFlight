@@ -1923,6 +1923,29 @@ static void osdElementAdsbWarning(osdElementParms_t *element)
     const int verticalMeters = vehicle->calculatedVehicleValues.verticalDistance / 100; // cm -> m
     tfp_sprintf(element->buff, "%c%s %c%d", arrow, distanceString, (verticalMeters < 0) ? '-' : '+', abs(verticalMeters));
 }
+
+static void osdElementAdsbInfo(osdElementParms_t *element)
+{
+    // Extended view of the closest aircraft: which way it is MOVING (relative to our heading),
+    // its class, ground speed and callsign.
+    adsbVehicle_t *vehicle = findVehicleClosestLimit(0);
+    if (!vehicle) {
+        return;
+    }
+
+    const int movementDeciDegrees = (vehicle->vehicleValues.heading / 10) - attitude.values.yaw; // course cdeg -> deci
+    const uint8_t movementArrow = osdGetDirectionSymbolFromHeading(DECIDEGREES_TO_DEGREES(movementDeciDegrees));
+
+    char callsign[ADSB_CALL_SIGN_MAX_LENGTH];
+    memcpy(callsign, vehicle->vehicleValues.callsign, sizeof(callsign));
+    callsign[ADSB_CALL_SIGN_MAX_LENGTH - 1] = '\0'; // ensure termination
+
+    tfp_sprintf(element->buff, "%c%s %c%d%c %s",
+        movementArrow,
+        adsbEmitterTypeString(vehicle->vehicleValues.emitterType),
+        SYM_SPEED, osdGetSpeedToSelectedUnit(vehicle->vehicleValues.horVelocity), osdGetSpeedToSelectedUnitSymbol(),
+        callsign);
+}
 #endif
 
 // Define the order in which the elements are drawn.
@@ -1967,6 +1990,7 @@ static const uint8_t osdElementDisplayOrder[] = {
     OSD_DISARMED,
 #ifdef USE_ADSB
     OSD_ADSB_WARNING,
+    OSD_ADSB_INFO,
 #endif
     OSD_NUMERICAL_HEADING,
     OSD_READY_MODE,
@@ -2097,6 +2121,7 @@ const osdElementDrawFn osdElementDrawFunction[OSD_ITEM_COUNT] = {
     [OSD_DISARMED]                = osdElementDisarmed,
 #ifdef USE_ADSB
     [OSD_ADSB_WARNING]            = osdElementAdsbWarning,
+    [OSD_ADSB_INFO]               = osdElementAdsbInfo,
 #endif
 #ifdef USE_GPS
     [OSD_HOME_DIR]                = osdElementGpsHomeDirection,
