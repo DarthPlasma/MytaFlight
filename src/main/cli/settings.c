@@ -152,6 +152,9 @@
 const char * const lookupTablePosHoldSource[] = {
     "AUTO", "GPS_ONLY", "OPTICALFLOW_ONLY"
 };
+const char * const lookupTablePosHoldNavMode[] = {
+    "ANGLE", "CRUISE"
+};
 #endif
 
 const char * const lookupTableOffOn[] = {
@@ -651,6 +654,7 @@ const lookupTableEntry_t lookupTables[] = {
 #endif
 #ifdef USE_POSITION_HOLD
     LOOKUP_TABLE_ENTRY(lookupTablePosHoldSource),
+    LOOKUP_TABLE_ENTRY(lookupTablePosHoldNavMode),
 #endif
 #ifdef USE_GYRO_OVERFLOW_CHECK
     LOOKUP_TABLE_ENTRY(lookupTableGyroOverflowCheck),
@@ -1192,6 +1196,7 @@ const clivalue_t valueTable[] = {
 #ifndef USE_WING
     { PARAM_NAME_POS_HOLD_DEADBAND,    VAR_UINT8 | MASTER_VALUE, .config.minmaxUnsigned = { 0, 50 }, PG_POSHOLD_CONFIG, offsetof(posHoldConfig_t, deadband) },
     { "poshold_position_source",       VAR_UINT8 | MASTER_VALUE | MODE_LOOKUP, .config.lookup = { TABLE_POSHOLD_SOURCE }, PG_POSHOLD_CONFIG, offsetof(posHoldConfig_t, positionSource) },
+    { "pos_hold_navmode",              VAR_UINT8 | MASTER_VALUE | MODE_LOOKUP, .config.lookup = { TABLE_POS_HOLD_NAVMODE }, PG_POSHOLD_CONFIG, offsetof(posHoldConfig_t, navMode) },
     { "poshold_opticalflow_quality_min", VAR_UINT8 | MASTER_VALUE, .config.minmaxUnsigned = { 0, 100 }, PG_POSHOLD_CONFIG, offsetof(posHoldConfig_t, opticalflowQualityMin) },
     { "poshold_opticalflow_max_range", VAR_UINT16 | MASTER_VALUE, .config.minmaxUnsigned = { 50, 1000 }, PG_POSHOLD_CONFIG, offsetof(posHoldConfig_t, opticalflowMaxRange) },
 #endif // !USE_WING

@@ -33,11 +33,17 @@ typedef enum {
     POSHOLD_SOURCE_OPTICALFLOW_ONLY
 } posHoldSource_e;
 
+typedef enum {
+    POS_HOLD_NAVMODE_ANGLE = 0,          // stick input hands over to pilot angle mode (classic behaviour)
+    POS_HOLD_NAVMODE_CRUISE              // stick input commands a wind-compensated velocity (vector cruise)
+} posHoldNavMode_e;
+
 typedef struct posHoldConfig_s {
     uint8_t deadband;
     uint8_t positionSource;              // Position source selection
     uint8_t opticalflowQualityMin;       // Minimum optical flow quality threshold
     uint16_t opticalflowMaxRange;        // Maximum altitude for optical flow (cm)
+    uint8_t navMode;                     // posHoldNavMode_e: stick behaviour (ANGLE = classic, CRUISE = velocity)
 } posHoldConfig_t;
 
 PG_DECLARE(posHoldConfig_t, posHoldConfig);
