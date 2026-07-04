@@ -43,6 +43,7 @@
 #include "sensors/gyro.h"
 #include "sensors/gyro_init.h"
 #include "sensors/initialisation.h"
+#include "sensors/temperature.h"
 #include "sensors/rangefinder.h"
 #include "sensors/sensors.h"
 #include "sensors/opticalflow.h"
@@ -89,6 +90,10 @@ bool sensorsAutodetect(void)
 
 #ifdef USE_MAG
     compassInit();
+#endif
+
+#ifdef USE_TEMPERATURE_SENSOR
+    temperatureSensorInit();
 #endif
 
 #ifdef USE_RANGEFINDER

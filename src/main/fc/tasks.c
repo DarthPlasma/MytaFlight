@@ -98,6 +98,7 @@
 #include "sensors/barometer.h"
 #include "sensors/battery.h"
 #include "sensors/compass.h"
+#include "sensors/temperature.h"
 #include "sensors/esc_sensor.h"
 #include "sensors/gyro.h"
 #include "sensors/sensors.h"
@@ -421,6 +422,10 @@ task_attribute_t task_attributes[TASK_COUNT] = {
     [TASK_BARO] = DEFINE_TASK("BARO", NULL, NULL, taskUpdateBaro, TASK_PERIOD_HZ(TASK_BARO_RATE_HZ), TASK_PRIORITY_LOW),
 #endif
 
+#ifdef USE_TEMPERATURE_SENSOR
+    [TASK_TEMPERATURE] = DEFINE_TASK("TEMPERATURE", NULL, NULL, temperatureSensorUpdate, TASK_PERIOD_HZ(TASK_TEMPERATURE_RATE_HZ), TASK_PRIORITY_LOW),
+#endif
+
 #if defined(USE_BARO) || defined(USE_GPS) || defined(USE_RANGEFINDER)
     [TASK_ALTITUDE] = DEFINE_TASK("ALTITUDE", NULL, NULL, taskCalculateAltitude, TASK_PERIOD_HZ(TASK_ALTITUDE_RATE_HZ), TASK_PRIORITY_LOW),
 #endif
@@ -604,6 +609,10 @@ void tasksInit(void)
 
 #ifdef USE_BARO
     setTaskEnabled(TASK_BARO, sensors(SENSOR_BARO));
+#endif
+
+#ifdef USE_TEMPERATURE_SENSOR
+    setTaskEnabled(TASK_TEMPERATURE, temperatureSensorIsPresent());
 #endif
 
 #if defined(USE_BARO) || defined(USE_GPS) || defined(USE_RANGEFINDER)
