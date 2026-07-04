@@ -214,6 +214,10 @@ typedef enum {
     OSD_WP_ETA,                 // Estimated time to waypoint
 #endif
 
+#ifdef USE_TEMPERATURE_SENSOR
+    OSD_BATTERY_TEMPERATURE,    // External I2C temperature sensor (battery temp)
+#endif
+
     OSD_ITEM_COUNT // MUST BE LAST
 } osd_items_e;
 
