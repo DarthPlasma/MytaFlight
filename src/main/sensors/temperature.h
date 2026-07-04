@@ -25,6 +25,8 @@
 
 #include "pg/pg.h"
 
+#define TASK_TEMPERATURE_RATE_HZ 2 // LM75 is slow-changing; polling a couple of times per second is plenty
+
 // Global/hardware settings for the external I2C temperature sensor (e.g. LM75).
 typedef struct temperatureSensorConfig_s {
     uint8_t i2c_device;    // I2C bus the sensor is wired to (I2CDEV_x)
