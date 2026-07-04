@@ -55,6 +55,7 @@
 #include "flight/flight_plan_nav.h"
 #include "flight/pos_hold.h"
 
+#include "io/adsb.h"
 #include "io/beeper.h"
 
 #include "osd/osd.h"
@@ -249,6 +250,15 @@ void renderOsdWarning(char *warningText, bool *blinking, uint8_t *displayAttr)
         *blinking = true;
         return;
     }
+
+#ifdef USE_ADSB
+    if (adsbCriticalThreatDetected()) {
+        tfp_sprintf(warningText, "AIRCRAFT APPROACHING");
+        *displayAttr = DISPLAYPORT_SEVERITY_CRITICAL;
+        *blinking = true;
+        return;
+    }
+#endif
 
 #ifdef USE_ESC_SENSOR
     // Show warning if we lose motor output, the ESC is overheating or excessive current draw
