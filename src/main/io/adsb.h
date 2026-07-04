@@ -82,5 +82,6 @@ adsbVehicleStatus_t *getAdsbStatus(void);
 adsbVehicleValues_t *getVehicleForFill(void);
 bool isEnvironmentOkForCalculatingADSBDistanceBearing(void);
 void recalculateVehicle(adsbVehicle_t *vehicle);
+const char *adsbEmitterTypeString(uint8_t emitterType); // short class label for a MAVLink ADSB_EMITTER_TYPE
 
 #endif // USE_ADSB
