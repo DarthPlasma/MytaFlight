@@ -32,6 +32,10 @@
 
 #ifdef USE_ADSB
 
+#if !defined(USE_GPS)
+#error "USE_ADSB requires USE_GPS (own position is needed for distance/bearing)"
+#endif
+
 #define ADSB_CALL_SIGN_MAX_LENGTH 9
 #define ADSB_MAX_VEHICLES 5
 #define ADSB_MAX_SECONDS_KEEP_INACTIVE_PLANE_IN_LIST 10
