@@ -140,6 +140,9 @@ typedef enum {
 #ifdef USE_BARO
     TASK_BARO,
 #endif
+#ifdef USE_TEMPERATURE_SENSOR
+    TASK_TEMPERATURE,
+#endif
 #ifdef USE_RANGEFINDER
     TASK_RANGEFINDER,
 #endif
