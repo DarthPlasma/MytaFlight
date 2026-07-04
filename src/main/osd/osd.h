@@ -222,6 +222,10 @@ typedef enum {
     OSD_POS_HOLD_READY,         // pre-engagement Position Hold readiness indicator
 #endif
 
+#ifdef USE_ADSB
+    OSD_ADSB_WARNING,           // Nearest ADS-B traffic: direction, distance, vertical separation
+#endif
+
     OSD_ITEM_COUNT // MUST BE LAST
 } osd_items_e;
 
