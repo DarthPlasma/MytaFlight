@@ -1909,7 +1909,7 @@ static void osdElementAdsbWarning(osdElementParms_t *element)
     // Show the closest tracked aircraft: an arrow pointing to it (relative to our heading),
     // the horizontal distance, and the vertical separation. Nothing is shown when there is no
     // traffic or no GPS fix (findVehicleClosestLimit returns NULL).
-    adsbVehicle_t *vehicle = findVehicleClosestLimit(0);
+    adsbVehicle_t *vehicle = findVehicleClosestForDisplay();
     if (!vehicle) {
         return;
     }
@@ -1928,7 +1928,7 @@ static void osdElementAdsbInfo(osdElementParms_t *element)
 {
     // Extended view of the closest aircraft: which way it is MOVING (relative to our heading),
     // its class, ground speed and callsign.
-    adsbVehicle_t *vehicle = findVehicleClosestLimit(0);
+    adsbVehicle_t *vehicle = findVehicleClosestForDisplay();
     if (!vehicle) {
         return;
     }
@@ -1945,6 +1945,13 @@ static void osdElementAdsbInfo(osdElementParms_t *element)
         adsbEmitterTypeString(vehicle->vehicleValues.emitterType),
         SYM_SPEED, osdGetSpeedToSelectedUnit(vehicle->vehicleValues.horVelocity), osdGetSpeedToSelectedUnitSymbol(),
         callsign);
+}
+
+static void osdElementAdsbStatus(osdElementParms_t *element)
+{
+    // "A<detected>/<in range>": aircraft tracked at detection range, and those within the
+    // configured distance/height limits.
+    tfp_sprintf(element->buff, "A%d/%d", getActiveVehiclesCount(), getVehiclesInDisplayRangeCount());
 }
 #endif
 
@@ -1991,6 +1998,7 @@ static const uint8_t osdElementDisplayOrder[] = {
 #ifdef USE_ADSB
     OSD_ADSB_WARNING,
     OSD_ADSB_INFO,
+    OSD_ADSB_STATUS,
 #endif
     OSD_NUMERICAL_HEADING,
     OSD_READY_MODE,
@@ -2122,6 +2130,7 @@ const osdElementDrawFn osdElementDrawFunction[OSD_ITEM_COUNT] = {
 #ifdef USE_ADSB
     [OSD_ADSB_WARNING]            = osdElementAdsbWarning,
     [OSD_ADSB_INFO]               = osdElementAdsbInfo,
+    [OSD_ADSB_STATUS]             = osdElementAdsbStatus,
 #endif
 #ifdef USE_GPS
     [OSD_HOME_DIR]                = osdElementGpsHomeDirection,

@@ -217,6 +217,7 @@ typedef enum {
 #ifdef USE_ADSB
     OSD_ADSB_WARNING,           // Nearest ADS-B traffic: direction, distance, vertical separation
     OSD_ADSB_INFO,              // Nearest ADS-B traffic (extended): movement, class, speed, callsign
+    OSD_ADSB_STATUS,            // ADS-B traffic counts: detected / within configured limits
 #endif
 
     OSD_ITEM_COUNT // MUST BE LAST
