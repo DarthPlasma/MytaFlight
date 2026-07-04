@@ -1550,6 +1550,21 @@ static void osdElementMainBatteryVoltage(osdElementParms_t *element)
     osdPrintFloat(element->buff, osdGetBatterySymbol(getBatteryAverageCellVoltage()), batteryVoltage, "", decimalPlaces, true, SYM_VOLT);
 }
 
+#ifdef USE_BATTERY_IMPEDANCE
+static void osdElementBatteryImpedance(osdElementParms_t *element)
+{
+    // Battery internal resistance in milliohms. The OSD font has no ohm glyph, so use "mR".
+    tfp_sprintf(element->buff, "%4dmR", getBatteryImpedance());
+}
+
+static void osdElementSagCompensatedBatteryVoltage(osdElementParms_t *element)
+{
+    const float voltage = getBatterySagCompensatedVoltage() / 100.0f;
+    const unsigned decimalPlaces = (voltage >= 10) ? 1 : 2; // 1 decimal at 10V+, mirrors the main voltage element
+    osdPrintFloat(element->buff, SYM_NONE, voltage, "", decimalPlaces, true, SYM_VOLT);
+}
+#endif
+
 static void osdElementMotorDiagnostics(osdElementParms_t *element)
 {
     int i = 0;
@@ -1936,6 +1951,10 @@ static const uint8_t osdElementDisplayOrder[] = {
     OSD_PIDRATE_PROFILE,
     OSD_WARNINGS,
     OSD_AVG_CELL_VOLTAGE,
+#ifdef USE_BATTERY_IMPEDANCE
+    OSD_BATTERY_IMPEDANCE,
+    OSD_SAG_COMP_BATT_VOLTAGE,
+#endif
     OSD_DEBUG,
     OSD_DEBUG2,
     OSD_PITCH_ANGLE,
@@ -2056,6 +2075,10 @@ const osdElementDrawFn osdElementDrawFunction[OSD_ITEM_COUNT] = {
     [OSD_PIDRATE_PROFILE]         = osdElementPidRateProfile,
     [OSD_WARNINGS]                = osdElementWarnings,
     [OSD_AVG_CELL_VOLTAGE]        = osdElementAverageCellVoltage,
+#ifdef USE_BATTERY_IMPEDANCE
+    [OSD_BATTERY_IMPEDANCE]       = osdElementBatteryImpedance,
+    [OSD_SAG_COMP_BATT_VOLTAGE]   = osdElementSagCompensatedBatteryVoltage,
+#endif
     [OSD_READY_MODE]              = osdElementReadyMode,
 #ifdef USE_GPS
     [OSD_GPS_LON]                 = osdElementGpsCoordinate,
