@@ -49,6 +49,38 @@ static adsbVehicleStatus_t adsbVehicleStatus = { .vehiclesMessagesTotal = 0, .he
 // Scratch record the MAVLink handler fills before handing it to adsbNewVehicle().
 static adsbVehicleValues_t vehicleForFill;
 
+// Short class labels indexed by MAVLink ADSB_EMITTER_TYPE (same taxonomy iNAV uses).
+static const char * const adsbEmitterTypeStrings[] = {
+    "UNKN",   // 0  NO_INFO
+    "LIGHT",  // 1  LIGHT
+    "SMALL",  // 2  SMALL
+    "LARGE",  // 3  LARGE
+    "VORTEX", // 4  HIGH_VORTEX_LARGE
+    "HEAVY",  // 5  HEAVY
+    "HIMANV", // 6  HIGHLY_MANUV
+    "ROTOR",  // 7  ROTOCRAFT
+    "UNKN",   // 8  UNASSIGNED
+    "GLIDER", // 9  GLIDER
+    "LTAIR",  // 10 LIGHTER_AIR
+    "PARA",   // 11 PARACHUTE
+    "ULTLT",  // 12 ULTRA_LIGHT
+    "UNKN",   // 13 UNASSIGNED2
+    "UAV",    // 14 UAV
+    "SPACE",  // 15 SPACE
+    "UNKN",   // 16 UNASSIGNED3
+    "EMGVEH", // 17 EMERGENCY_SURFACE
+    "SRVVEH", // 18 SERVICE_SURFACE
+    "OBSTAC", // 19 POINT_OBSTACLE
+};
+
+const char *adsbEmitterTypeString(uint8_t emitterType)
+{
+    if (emitterType < ARRAYLEN(adsbEmitterTypeStrings)) {
+        return adsbEmitterTypeStrings[emitterType];
+    }
+    return "UNKN";
+}
+
 static adsbVehicle_t *findVehicleByIcao(uint32_t icao)
 {
     for (int i = 0; i < ADSB_MAX_VEHICLES; i++) {
