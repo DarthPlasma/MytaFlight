@@ -97,16 +97,11 @@ PAGE = r"""<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
  </div>
 
  <div class="panel"><h2>Custom features (this fork)</h2><div class="grid" id="grp-custom"></div></div>
- <div class="panel"><h2>Sensors</h2><div class="grid" id="grp-sensor"></div></div>
- <div class="panel slimonly"><h2>Receiver</h2><div class="grid" id="grp-rx"></div></div>
- <div class="panel slimonly"><h2>Telemetry</h2><div class="grid" id="grp-tel"></div></div>
- <div class="panel slimonly"><h2>OSD type</h2>
-   <div class="row">
-     <label class="chk"><input type="radio" name="osd" value="USE_OSD_HD" checked> HD (DJI / Walksnail / HDZero)</label>
-     <label class="chk"><input type="radio" name="osd" value="USE_OSD_HD" data-wtf="1"> WTF-OS (DJI, same HD build flag)</label>
-     <label class="chk"><input type="radio" name="osd" value="USE_OSD_SD"> SD (analog MAX7456)</label>
-   </div>
- </div>
+ <div class="panel slimonly"><h2>Sensors</h2><div class="grid" id="grp-sensor"></div></div>
+ <div class="panel slimonly"><h2>Receiver (single)</h2><div class="grid" id="grp-rx"></div></div>
+ <div class="panel slimonly"><h2>Telemetry (single)</h2><div class="grid" id="grp-tel"></div></div>
+ <div class="panel slimonly"><h2>Video / OSD systems</h2><div class="grid" id="grp-osd"></div></div>
+ <div class="panel slimonly"><p class="muted">Flight modes (pos/alt hold, GPS rescue, launch, acro trainer…), filters (RPM, dynamic notch), LED strip, VTX control, blackbox, camera control, servos, ESC sensor etc. are <b>always compiled in</b> on these STM32 targets and are enabled/configured at runtime in the Configurator — they are not build-time options.</p></div>
 
  <div class="panel">
    <div class="row"><button id="buildBtn">Build firmware</button>
@@ -125,36 +120,43 @@ const TARGETS = __TARGETS__;
 const CUSTOM = [["USE_BATTERY_IMPEDANCE","Battery impedance (default-on)",true],
                 ["USE_TEMPERATURE_SENSOR","I2C temperature sensor",false],
                 ["USE_ADSB","ADS-B traffic (needs GPS)",false]];
-const SENSOR = [["USE_GPS","GPS",true],["USE_MAG","Compass / mag",true],
-                ["USE_BARO","Barometer",true],["USE_RANGEFINDER","Rangefinder",false]];
-const RX = [["USE_SERIALRX_CRSF","Crossfire (CRSF)",true],["USE_RX_EXPRESSLRS","ExpressLRS (SPI)",false],
-            ["USE_SERIALRX_GHST","Ghost (GHST)",false],["USE_SERIALRX_SBUS","SBUS",true],
-            ["USE_SERIALRX_SPEKTRUM","Spektrum",false],["USE_SERIALRX_IBUS","IBUS",false],
-            ["USE_SERIALRX_FPORT","FPort",false],["USE_SERIALRX_SRXL2","SRXL2",false],
-            ["USE_SERIALRX_SUMD","SUMD",false],["USE_SERIALRX_XBUS","XBUS",false]];
-const TEL = [["USE_TELEMETRY_CRSF","Crossfire telemetry",true],["USE_TELEMETRY_GHST","Ghost telemetry",false],
-             ["USE_TELEMETRY_SMARTPORT","SmartPort (FrSky)",false],["USE_TELEMETRY_FRSKY_HUB","FrSky Hub",false],
-             ["USE_TELEMETRY_MAVLINK","MAVLink telemetry",false],["USE_TELEMETRY_SRXL","SRXL",false],
-             ["USE_TELEMETRY_IBUS","IBUS telemetry",false],["USE_TELEMETRY_LTM","LTM",false],
-             ["USE_TELEMETRY_HOTT","HoTT",false]];
+const SENSOR = [["USE_GPS","GPS",true]]; // baro/mag come from the board config; GPS is genuinely opt-in
+const OSD = [["USE_OSD_HD","HD (DJI / Walksnail / HDZero)",true],["USE_OSD_HD","WTF-OS (DJI — same HD flag)",false],
+             ["USE_OSD_SD","SD (analog MAX7456)",false]];
+// Receiver and telemetry are single-choice (radio).
+const RX = [["USE_SERIALRX_CRSF","Crossfire (CRSF)"],["USE_RX_EXPRESSLRS","ExpressLRS (SPI)"],["USE_SERIALRX_GHST","Ghost (GHST)"],
+            ["USE_SERIALRX_SBUS","SBUS"],["USE_SERIALRX_SPEKTRUM","Spektrum"],["USE_SERIALRX_IBUS","IBUS"],
+            ["USE_SERIALRX_FPORT","FPort"],["USE_SERIALRX_SRXL2","SRXL2"],["USE_SERIALRX_SUMD","SUMD"],["USE_SERIALRX_XBUS","XBUS"]];
+const TEL = [["","— none —"],["USE_TELEMETRY_CRSF","Crossfire"],["USE_TELEMETRY_GHST","Ghost"],
+             ["USE_TELEMETRY_SMARTPORT","SmartPort (FrSky)"],["USE_TELEMETRY_FRSKY_HUB","FrSky Hub"],
+             ["USE_TELEMETRY_MAVLINK","MAVLink"],["USE_TELEMETRY_SRXL","SRXL"],["USE_TELEMETRY_IBUS","IBUS"],
+             ["USE_TELEMETRY_LTM","LTM"],["USE_TELEMETRY_HOTT","HoTT"]];
 const $=id=>document.getElementById(id);
 $("target").innerHTML = TARGETS.map(t=>`<option>${t}</option>`).join("");
 function fill(id,list){ $(id).innerHTML = list.map(([f,l,c])=>
   `<label class="chk"><input type="checkbox" value="${f}" ${c?"checked":""}> ${l}</label>`).join(""); }
-fill("grp-custom",CUSTOM); fill("grp-sensor",SENSOR); fill("grp-rx",RX); fill("grp-tel",TEL);
+function fillRadio(id,name,list,def){ $(id).innerHTML = list.map(([f,l],i)=>
+  `<label class="chk"><input type="radio" name="${name}" value="${f}" ${i===def?"checked":""}> ${l}</label>`).join(""); }
+fill("grp-custom",CUSTOM); fill("grp-sensor",SENSOR); fill("grp-osd",OSD);
+fillRadio("grp-rx","rx",RX,0); fillRadio("grp-tel","tel",TEL,1);
 
 function mode(){ return document.querySelector('input[name=mode]:checked').value; }
 function checked(id){ return [...document.querySelectorAll(`#${id} input:checked`)].map(i=>i.value); }
+function radioVal(name){ const el = document.querySelector(`input[name=${name}]:checked`); return el ? el.value : ""; }
 function computeOptions(){
   const m = mode(); let opts = [];
-  const custom = checked("grp-custom"), sensor = checked("grp-sensor");
+  const custom = checked("grp-custom");
   if (m === "full") {
-    // full build already has RX/telemetry/OSD/sensors; only add opt-in extras
+    // full build already has RX/telemetry/OSD/sensors/modes; only add opt-in extras
     opts = custom.filter(f=>f!=="USE_BATTERY_IMPEDANCE"); // impedance is default-on in full builds
     if (opts.includes("USE_ADSB") && !opts.includes("USE_GPS")) opts.push("USE_GPS"); // adsb needs gps on all boards
   } else {
-    const osd = document.querySelector('input[name=osd]:checked').value;
-    opts = ["CLOUD_BUILD","USE_DSHOT", osd, ...custom, ...sensor, ...checked("grp-rx"), ...checked("grp-tel")];
+    // impedance is unconditionally defined (always on), so it must not be passed here either
+    opts = ["CLOUD_BUILD", ...checked("grp-osd"), ...checked("grp-sensor"),
+            ...custom.filter(f=>f!=="USE_BATTERY_IMPEDANCE")];
+    const rx = radioVal("rx"), tel = radioVal("tel");
+    if (rx) opts.push(rx);
+    if (tel) opts.push(tel);
     if (opts.includes("USE_ADSB") && !opts.includes("USE_GPS")) opts.push("USE_GPS");
   }
   return [...new Set(opts)];
