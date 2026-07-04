@@ -214,6 +214,10 @@ typedef enum {
     OSD_WP_ETA,                 // Estimated time to waypoint
 #endif
 
+#ifdef USE_ADSB
+    OSD_ADSB_WARNING,           // Nearest ADS-B traffic: direction, distance, vertical separation
+#endif
+
     OSD_ITEM_COUNT // MUST BE LAST
 } osd_items_e;
 

@@ -160,6 +160,7 @@
 #include "flight/mixer.h"
 #include "flight/pid.h"
 
+#include "io/adsb.h"
 #include "io/gps.h"
 #include "io/vtx.h"
 
@@ -1902,6 +1903,28 @@ static void osdElementSys(osdElementParms_t *element)
 }
 #endif
 
+#ifdef USE_ADSB
+static void osdElementAdsbWarning(osdElementParms_t *element)
+{
+    // Show the closest tracked aircraft: an arrow pointing to it (relative to our heading),
+    // the horizontal distance, and the vertical separation. Nothing is shown when there is no
+    // traffic or no GPS fix (findVehicleClosestLimit returns NULL).
+    adsbVehicle_t *vehicle = findVehicleClosestLimit(0);
+    if (!vehicle) {
+        return;
+    }
+
+    const int relativeDeciDegrees = (vehicle->calculatedVehicleValues.dir / 10) - attitude.values.yaw;
+    const uint8_t arrow = osdGetDirectionSymbolFromHeading(DECIDEGREES_TO_DEGREES(relativeDeciDegrees));
+
+    char distanceString[8];
+    osdFormatDistanceString(distanceString, vehicle->calculatedVehicleValues.dist / 100, SYM_NONE); // cm -> m
+
+    const int verticalMeters = vehicle->calculatedVehicleValues.verticalDistance / 100; // cm -> m
+    tfp_sprintf(element->buff, "%c%s %c%d", arrow, distanceString, (verticalMeters < 0) ? '-' : '+', abs(verticalMeters));
+}
+#endif
+
 // Define the order in which the elements are drawn.
 // Elements positioned later in the list will overlay the earlier
 // ones if their character positions overlap
@@ -1942,6 +1965,9 @@ static const uint8_t osdElementDisplayOrder[] = {
     OSD_ROLL_ANGLE,
     OSD_MAIN_BATT_USAGE,
     OSD_DISARMED,
+#ifdef USE_ADSB
+    OSD_ADSB_WARNING,
+#endif
     OSD_NUMERICAL_HEADING,
     OSD_READY_MODE,
 #ifdef USE_VARIO
@@ -2069,6 +2095,9 @@ const osdElementDrawFn osdElementDrawFunction[OSD_ITEM_COUNT] = {
 #endif
     [OSD_MAIN_BATT_USAGE]         = osdElementMainBatteryUsage,
     [OSD_DISARMED]                = osdElementDisarmed,
+#ifdef USE_ADSB
+    [OSD_ADSB_WARNING]            = osdElementAdsbWarning,
+#endif
 #ifdef USE_GPS
     [OSD_HOME_DIR]                = osdElementGpsHomeDirection,
     [OSD_HOME_DIST]               = osdElementGpsHomeDistance,
