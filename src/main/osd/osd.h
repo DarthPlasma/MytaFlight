@@ -223,6 +223,12 @@ typedef enum {
     OSD_BATTERY_TEMPERATURE,    // External I2C temperature sensor (battery temp)
 #endif
 
+#ifdef USE_ADSB
+    OSD_ADSB_WARNING,           // Nearest ADS-B traffic: direction, distance, vertical separation
+    OSD_ADSB_INFO,              // Nearest ADS-B traffic (extended): movement, class, speed, callsign
+    OSD_ADSB_STATUS,            // ADS-B traffic counts: detected / within configured limits
+#endif
+
     OSD_ITEM_COUNT // MUST BE LAST
 } osd_items_e;
 
