@@ -45,6 +45,7 @@
 
 #ifdef USE_POSITION_HOLD
 #include "flight/pos_hold.h"
+#include "pg/pos_hold.h"
 #endif
 
 // DEBUG_AUTOPILOT_PID each parameter on the axis set by gyro_filter_debug_axis
@@ -318,6 +319,33 @@ void resetPositionControl(unsigned taskRateHz)
     resetDistanceErrorIntegral();
 }
 
+// True when position hold is configured for the vector "cruise" behaviour (sticks command
+// a wind-compensated velocity instead of handing over to pilot angle mode).
+static bool posHoldCruiseMode(void)
+{
+#ifdef USE_POSITION_HOLD
+    return posHoldConfig()->navMode == POS_HOLD_NAVMODE_CRUISE;
+#else
+    return false;
+#endif
+}
+
+// Map pilot pitch/roll stick deflection to an earth-frame velocity setpoint (cm/s):
+// body-frame forward (pitch) and right (roll), rotated by the current heading.
+static vector2_t cruiseVelocityFromSticks(void)
+{
+    const float maxVel = autopilotConfig()->maxVelocity;
+    const float forward = getRcDeflection(FD_PITCH) * maxVel; // body +forward (nose)
+    const float right   = getRcDeflection(FD_ROLL)  * maxVel; // body +right
+    const float headingRad = DECIDEGREES_TO_RADIANS(attitude.values.yaw);
+    const float s = sinf(headingRad);
+    const float c = cosf(headingRad);
+    vector2_t v;
+    v.v[EF_EAST]  = forward * s + right * c;
+    v.v[EF_NORTH] = forward * c - right * s;
+    return v;
+}
+
 bool positionControl(void)
 {
     const positionEstimate3d_t *est = positionEstimatorGetEstimate();
@@ -344,6 +372,9 @@ bool positionControl(void)
     positionNavUpdate(dt, est);
     ap.navActive = positionNavHasActiveTarget() && !positionNavTargetReached();
 
+    // Cruise: sticks command a wind-compensated velocity instead of angle mode.
+    const bool cruiseActive = posHoldCruiseMode() && ap.sticksActive && !ap.navActive;
+
     if (ap.navActive || ap.sticksActive) {
         isPositionHeld = false;
 
@@ -353,6 +384,8 @@ bool positionControl(void)
             }
             const vector3_t tgtVel = positionNavGetTargetVelocityCmS();
             targetVelocity = *(const vector2_t *)&tgtVel.v;
+        } else if (cruiseActive) {
+            targetVelocity = cruiseVelocityFromSticks();
         }
     } else {
         // Control mode should be position hold
@@ -421,10 +454,11 @@ bool positionControl(void)
         previousVelocity.v[axis] = velocityFiltered;
         const float acceleration = pt2FilterApply(&posAccelLpf[axis], accelerationRaw);
 
-        if (ap.navActive) {
-            distanceError.v[axis] += velocityError.v[axis] * dt; 
+        if (ap.navActive || cruiseActive) {
+            // track the commanded velocity: the target position advances with the velocity error
+            distanceError.v[axis] += velocityError.v[axis] * dt;
         } else if (!isPositionHeld) {
-            // sticks active
+            // sticks active in ANGLE mode
             distanceErrorIntegral.v[axis] *= 0.99f;
             distanceError.v[axis] = 0.0f;
         }
@@ -503,7 +537,13 @@ bool isAutopilotInControl(void)  // when false, pid.c allows flight in angle mod
         return true;
     }
 
-    // in position hold, if sticks are moved, angle mode flight controlled by the pilot is active
+    // In CRUISE mode the autopilot keeps roll/pitch control even while the sticks command a
+    // velocity, so wind is compensated during repositioning (no hand-over to raw angle mode).
+    if (posHoldCruiseMode()) {
+        return true;
+    }
+
+    // in ANGLE mode position hold, moving the sticks hands over to pilot angle mode flight
     return !ap.sticksActive;
 }
 
