@@ -222,6 +222,10 @@ typedef enum {
     OSD_POS_HOLD_READY,         // pre-engagement Position Hold readiness indicator
 #endif
 
+#ifdef USE_TEMPERATURE_SENSOR
+    OSD_BATTERY_TEMPERATURE,    // External I2C temperature sensor (battery temp)
+#endif
+
     OSD_ITEM_COUNT // MUST BE LAST
 } osd_items_e;
 
