@@ -144,10 +144,23 @@ const encode = (x, y, profFlags, typeBits) =>
 const profFlag = p => 1 << (PROF + p - 1);
 
 // Representative sample strings so footprints/overlaps are visible. Unknown -> label from name.
+// OSD glyphs approximated as inline SVG. Full fidelity would need the goggle's own OSD font
+// (256 glyphs, lives on the display side), so symbols are approximated; text values are exact.
+const GLYPH_SVG = {
+  thermo:'<svg width="9" height="15" viewBox="0 0 9 15" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linejoin="round"><path d="M4.5 1.6a1.6 1.6 0 0 0-1.6 1.6v5.9a3 3 0 1 0 3.2 0V3.2A1.6 1.6 0 0 0 4.5 1.6Z"/><circle cx="4.5" cy="11" r="1.5" fill="currentColor" stroke="none"/></svg>',
+  volt:'<svg width="8" height="14" viewBox="0 0 8 14" fill="currentColor"><path d="M4.9 0 0 8h2.9L2 14l6-8.6H4.2L4.9 0Z"/></svg>',
+  batt:'<svg width="14" height="9" viewBox="0 0 14 9" fill="none" stroke="currentColor" stroke-width="1"><rect x="0.5" y="0.5" width="11" height="8" rx="1"/><rect x="12" y="3" width="2" height="3" fill="currentColor" stroke="none"/><rect x="2" y="2" width="6" height="5" fill="currentColor" stroke="none"/></svg>',
+  degc:'<svg width="12" height="14" viewBox="0 0 12 14" fill="none" stroke="currentColor" stroke-width="1.1"><circle cx="2.6" cy="3" r="1.5"/><path d="M10.6 4.4a4.2 4.2 0 1 0 0 5.2"/></svg>',
+  amp:'<svg width="10" height="14" viewBox="0 0 10 14" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round"><path d="M1 13 5 1l4 12M2.5 9h5"/></svg>',
+};
+// single-cell glyph markers embedded in sample strings (private-use code points, 1 char = 1 cell)
+const GT='', GV='', GB='', GD='', GA='';
+const GLYPHS = { [GT]:GLYPH_SVG.thermo, [GV]:GLYPH_SVG.volt, [GB]:GLYPH_SVG.batt, [GD]:GLYPH_SVG.degc, [GA]:GLYPH_SVG.amp };
+
 const SAMPLES = {
-  osd_vbat_pos:"16.8V", osd_sag_comp_batt_pos:"16.8V", osd_avg_cell_voltage_pos:"4.20V",
-  osd_battery_impedance_pos:"  18mR", osd_battery_temp_pos:"B* 45C", osd_rssi_pos:"RSS99", osd_link_quality_pos:"LQ:99",
-  osd_craft_name_pos:"CRAFTNAME", osd_current_pos:"12.4A", osd_mah_drawn_pos:"1234mAh",
+  osd_vbat_pos: GB+"16.8"+GV, osd_sag_comp_batt_pos:"16.8"+GV, osd_avg_cell_voltage_pos: GB+"4.20"+GV,
+  osd_battery_impedance_pos:"  18mR", osd_battery_temp_pos:"B"+GT+" 45"+GD, osd_rssi_pos:"RSS99", osd_link_quality_pos:"LQ:99",
+  osd_craft_name_pos:"CRAFTNAME", osd_current_pos:"12.4"+GA, osd_mah_drawn_pos:"1234mAh",
   osd_power_pos:"210W", osd_altitude_pos:"12.3m", osd_gps_speed_pos:"45", osd_gps_sats_pos:"S12",
   osd_flymode_pos:"ANGL", osd_throttle_pos_pos:"35%", osd_warnings_pos:"LAND NOW",
 };
@@ -212,8 +225,8 @@ function renderGrid(){
   for (let y=0;y<ROWS;y++) for (let x=0;x<COLS;x++){
     const o = owner[y][x]; const isSel = o && o.name===selected;
     const cls = 'gc' + (o? (ovl[y][x]?' ovl':' own'):'') + (isSel?' sel':'');
-    const ch = o ? escapeHtml(o.ch) : '·';
-    html += `<div class="${cls}" data-x="${x}" data-y="${y}">${ch}</div>`;
+    const content = !o ? '·' : (GLYPHS[o.ch] || escapeHtml(o.ch));
+    html += `<div class="${cls}" data-x="${x}" data-y="${y}">${content}</div>`;
   }
   grid.innerHTML = html;
 }
@@ -315,15 +328,14 @@ function addElement(name){
 }
 
 // ---- element preview (approximate glyphs via inline SVG) ----
-const G_THERMO = '<svg width="9" height="15" viewBox="0 0 9 15" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linejoin="round"><path d="M4.5 1.6a1.6 1.6 0 0 0-1.6 1.6v5.9a3 3 0 1 0 3.2 0V3.2A1.6 1.6 0 0 0 4.5 1.6Z"/><circle cx="4.5" cy="11" r="1.5" fill="currentColor" stroke="none"/></svg>';
-const G_VOLT = '<svg width="8" height="14" viewBox="0 0 8 14" fill="currentColor"><path d="M4.9 0 0 8h2.9L2 14l6-8.6H4.2L4.9 0Z"/></svg>';
 function buildPreview(){
+  const T = GLYPH_SVG.thermo, V = GLYPH_SVG.volt, D = GLYPH_SVG.degc;
   const rows = [
-    ['Battery temp',            'B'+G_THERMO+' 25°C', false],
-    ['— alarm (out of range)',  'B'+G_THERMO+' 65°C', true],
-    ['— sensor absent',         'B'+G_THERMO+'---°C', false],
+    ['Battery temp',            'B'+T+' 25'+D, false],
+    ['— alarm (out of range)',  'B'+T+' 65'+D, true],
+    ['— sensor absent',         'B'+T+'---'+D, false],
     ['Battery impedance',       '18mR', false],
-    ['Sag-comp voltage',        '16.8'+G_VOLT, false],
+    ['Sag-comp voltage',        '16.8'+V, false],
   ];
   $('preview').innerHTML = rows.map(([lbl,val,blink])=>
     `<div class="pv"><span class="lbl">${lbl}</span><span class="val${blink?' blink':''}">${val}</span></div>`).join('');
