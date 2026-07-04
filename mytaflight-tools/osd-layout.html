@@ -170,19 +170,25 @@ const SAMPLES = {
   osd_power_pos:"210W", osd_altitude_pos: GL+"12.3m", osd_gps_speed_pos:"45",
   osd_gps_sats_pos: GS+"12", osd_gps_lat_pos:"47.1234", osd_gps_lon_pos:" 9.5678",
   osd_home_dir_pos: GR, osd_home_dist_pos: GH+"120m", osd_flight_dist_pos:"1.2km",
-  osd_numerical_heading_pos: GR+"120", osd_numerical_vario_pos:"1.5", osd_efficiency_pos:"210",
-  osd_flymode_pos:"ANGL", osd_throttle_pos_pos:"35%", osd_warnings_pos:"LAND NOW",
+  osd_nheading_pos: GR+"120", osd_nvario_pos:"1.5", osd_efficiency_pos:"210",
+  osd_core_temp_pos:"C"+GT+" 45"+GD, osd_esc_tmp_pos:"E"+GT+" 45"+GD, osd_g_force_pos:"1.2G",
+  osd_pit_ang_pos:"P-4.5°", osd_rol_ang_pos:"R 2.3°",
+  osd_flymode_pos:"ANGL", osd_throttle_pos:"35%", osd_warnings_pos:"LAND NOW",
 };
 
 // Multi-cell (graphic/background) elements: relative cells [{dx,dy,ch}] instead of a single-row string.
 // Box-drawing chars render reliably in monospace; shapes are representative for layout, not pixel-exact.
 const MULTICELL = {
   osd_crosshairs_pos: () => [{dx:0,dy:0,ch:'─'},{dx:1,dy:0,ch:'┼'},{dx:2,dy:0,ch:'─'}],
-  osd_artificial_horizon_pos: () => Array.from({length:9},(_,i)=>({dx:i,dy:0,ch:'─'})),
-  osd_horizon_sidebars_pos: () => {
+  osd_ah_pos: () => Array.from({length:9},(_,i)=>({dx:i,dy:0,ch:'─'})),        // artificial horizon
+  osd_ah_sbar_pos: () => {                                                     // AH side bars
     const cells=[], H=7, sep=24;
-    for(let i=0;i<H;i++){ cells.push({dx:0,dy:i,ch:'│'}); cells.push({dx:sep,dy:i,ch:'│'}); }
-    cells.push({dx:0,dy:3,ch:'┤'}); cells.push({dx:sep,dy:3,ch:'├'});
+    for(let i=0;i<H;i++){ cells.push({dx:0,dy:i,ch:i===3?'┤':'│'}); cells.push({dx:sep,dy:i,ch:i===3?'├':'│'}); }
+    return cells;
+  },
+  osd_compass_bar_pos: () => {                                                 // heading tape
+    const cells = ['─','N','─','─','─','E','─','─','─'].map((ch,i)=>({dx:i, dy:1, ch}));
+    cells.push({dx:4, dy:0, ch:'▾'});
     return cells;
   },
 };
@@ -243,7 +249,7 @@ function renderGrid(){
     for (const c of elementCells(el)){
       const cx = el.x + c.dx, cy = el.y + c.dy;
       if (cx<0||cx>=COLS||cy<0||cy>=ROWS) continue;
-      if (owner[cy][cx] !== null) ovl[cy][cx] = true;
+      if (owner[cy][cx] !== null && owner[cy][cx].name !== el.name) ovl[cy][cx] = true; // only cross-element overlaps
       owner[cy][cx] = { name:el.name, ch:c.ch };
     }
   }
