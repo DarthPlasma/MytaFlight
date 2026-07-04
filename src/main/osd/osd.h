@@ -222,6 +222,11 @@ typedef enum {
     OSD_POS_HOLD_READY,         // pre-engagement Position Hold readiness indicator
 #endif
 
+#ifdef USE_BATTERY_IMPEDANCE
+    OSD_BATTERY_IMPEDANCE,      // Battery internal resistance in milliohms
+    OSD_SAG_COMP_BATT_VOLTAGE,  // Sag-compensated (no-load) battery voltage
+#endif
+
     OSD_ITEM_COUNT // MUST BE LAST
 } osd_items_e;
 
