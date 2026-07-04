@@ -29,6 +29,7 @@
 #include "common/utils.h"
 
 #include "drivers/bus_i2c.h"
+#include "drivers/temperature/lm75.h"
 
 #include "pg/pg.h"
 #include "pg/pg_ids.h"
@@ -51,14 +52,21 @@ static int16_t sensorDeciDegrees = 0; // 0.1 C
 
 void temperatureSensorInit(void)
 {
-    // TODO (step 2): probe the LM75 on the configured bus/address and set sensorPresent.
-    sensorPresent = false;
+    sensorPresent = lm75Detect(temperatureSensorConfig()->i2c_device, temperatureSensorConfig()->i2c_address);
 }
 
 void temperatureSensorUpdate(timeUs_t currentTimeUs)
 {
     UNUSED(currentTimeUs);
-    // TODO (step 2): read the LM75 temperature register and update sensorDeciDegrees / sensorPresent.
+
+    int16_t deciDegrees;
+    if (lm75Read(temperatureSensorConfig()->i2c_device, temperatureSensorConfig()->i2c_address, &deciDegrees)) {
+        sensorDeciDegrees = deciDegrees;
+        sensorPresent = true;
+    } else {
+        // No response this cycle: report absent so the OSD shows dashes rather than a stale value.
+        sensorPresent = false;
+    }
 }
 
 bool temperatureSensorIsPresent(void)
