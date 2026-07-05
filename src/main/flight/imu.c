@@ -209,6 +209,13 @@ void imuInit(void)
 
 bool imuIsHeadingValid(void)
 {
+#ifdef SIMULATOR_BUILD
+    // In SITL the attitude (including yaw) is set directly from the simulator's
+    // orientation quaternion, so the heading is always known and valid. There is
+    // no real magnetometer, and GPS-course heading would otherwise require the
+    // craft to be moving — which blocks position hold from engaging at hover.
+    return true;
+#endif
 #ifdef USE_MAG
     if (sensors(SENSOR_MAG) && compassIsHealthy()) {
         return true;
