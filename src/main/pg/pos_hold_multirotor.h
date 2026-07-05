@@ -33,6 +33,12 @@ typedef enum {
     POSHOLD_SOURCE_OPTICALFLOW_ONLY
 } posHoldSource_e;
 
+// WARNING: CRUISE mode could NOT be validated in SITL/Gazebo (simulator
+// pos-hold frame issues, not feature bugs). Its earth-frame math is checked
+// offline, but the stick-sign convention is unconfirmed in flight — it must be
+// field-tested with an acro fallback, watching that pitch-forward commands
+// forward (not backward) velocity. Default stays ANGLE, so nothing changes
+// unless CRUISE is explicitly selected.
 typedef enum {
     POS_HOLD_NAVMODE_ANGLE = 0,          // stick input hands over to pilot angle mode (classic behaviour)
     POS_HOLD_NAVMODE_CRUISE              // stick input commands a wind-compensated velocity (vector cruise)
