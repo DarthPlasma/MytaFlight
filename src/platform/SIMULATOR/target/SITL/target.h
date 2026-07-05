@@ -111,6 +111,14 @@
 #define USE_GPS
 #define USE_VIRTUAL_GPS
 
+// SITL fix: TARGET_FLASH_SIZE is defined further below (i.e. after common_pre.h
+// has already been included), so common_pre.h's `#if TARGET_FLASH_SIZE >= 1024`
+// guard sees it as 0 and leaves altitude/position hold out of the SITL build.
+// Enable them explicitly here (target.h is included before every source body,
+// so settings.c and the flight code see them).
+#define USE_ALTITUDE_HOLD
+#define USE_POSITION_HOLD
+
 #define USE_PARAMETER_GROUPS
 
 #ifndef USE_PWM_OUTPUT
