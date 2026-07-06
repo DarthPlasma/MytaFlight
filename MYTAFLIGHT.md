@@ -48,7 +48,7 @@ make TMOTORVELOXF7V2 OPTIONS="USE_TEMPERATURE_SENSOR USE_ADSB USE_GPS"
 | `feature/temp-sensors` | Feature B (I2C temperature) + both tools live here historically |
 | `feature/adsb` | Feature C (ADS-B) |
 | `feature/poshold-vector` | Feature D (CRUISE velocity-stick pos-hold) — **NOT flight-validated** |
-| **`integration`** | merges A+B+C + both tools. The branch to flash. (D not merged until SITL-validated.) |
+| **`integration`** | merges A+B+C+**D** + tools (build-tool, osd-layout, taranis-sitl-rc, SITL-GAZEBO.md). The branch to flash. Feature D merged 2026-07-05 (commit f8ac642) with default `ANGLE`, **field-test pending** — SITL could not validate it. |
 
 Feature branches are independent (each from master) for clean upstream rebasing. `integration` is where they come together.
 
@@ -98,7 +98,9 @@ The handoff doc was wrong that "BF has only MAVLink TX": modern BF bundles the f
 Key finding: modern BF master **already has** a Kalman position/velocity estimator (`flight/position_estimator.c`) and a vector pos→vel→accel→angle cascade (`flight/autopilot_multirotor.c::positionControl()`) — the "vector position hold" the old doc wanted is already upstream. The genuine gap: on stick input, BF pos-hold **hands over to raw pilot angle mode** (drift in crosswind, false sense of control). iNAV instead commands velocity.
 - What we added: CLI `pos_hold_navmode` = `ANGLE` (default, classic) | `CRUISE`. In CRUISE, inside POS HOLD, pitch/roll stick deflection commands a wind-compensated **velocity** (magnitude `ap_max_velocity`, shared with waypoint nav) instead of angle mode; yaw stays pilot; releasing brakes to a hold.
 - Files: `pg/pos_hold_multirotor.{c,h}` (navMode + enum, PG v2→3), `cli/settings.{c,h}` (lookup ANGLE/CRUISE), `flight/autopilot_multirotor.c` (`cruiseVelocityFromSticks()`, wire into `positionControl()`, keep `isAutopilotInControl()` true in CRUISE). Guarded by `FLIGHT_MODE(POS_HOLD_MODE)` at the pid.c call site; default ANGLE = zero behaviour change.
-- **TODO before flight**: validate in SITL — stick sign conventions (esp. roll direction), velocity tracking, brake-to-hold on release, failsafe/sensor-loss. Then merge to `integration`. Full sim (Gazebo/RealFlight/X-Plane with GPS) runs on the user's machine.
+- **Status (2026-07-05): merged to `integration` (f8ac642); NOT flight-validated.** Earth-frame math validated offline (native C test, 13/13). SITL could **not** validate it: getting a quad to fly pos-hold in the SITL+Gazebo setup needed a cascade of integration fixes (pos/alt hold not compiled into SITL → `target.h`; heading invalid at hover → `imu.c` `imuIsHeadingValid()` returns true under `SIMULATOR_BUILD`; both SITL-only, commit 7d7a594), and finally hit an unresolved **yaw↔position frame mismatch causing toilet-bowl** in pos hold (affects all pos hold in that sim setup, not the feature). Decision: field-test on real hardware (DAKEFPVH743) with acro fallback.
+- **TODO at field test**: confirm stick-sign convention (pitch-forward → forward, not backward; roll direction), brake-to-hold on release, failsafe/sensor-loss. If a sign is inverted, flip it in `cruiseVelocityFromSticks()`. Default stays ANGLE so flashing changes nothing until CRUISE is selected.
+- SITL tooling (branch `integration`, `mytaflight-tools/`): `taranis-sitl-rc.py` (EdgeTX Taranis USB joystick → SITL UDP :9004 RC bridge, runs on the Mac with `--host <VM_IP>`), `SITL-GAZEBO.md` (full UTM+Ubuntu 24.04+Gazebo Harmonic pipeline).
 
 ---
 
@@ -159,6 +161,6 @@ MytaFlight/
 - LTO "type mismatch" warnings after changing a struct/enum size are stale-incremental artifacts → `make clean` clears them.
 
 ## 8. Open items / next steps
-1. **Feature D**: SITL-validate CRUISE, then merge `feature/poshold-vector` → `integration`. Optionally clamp diagonal velocity to `ap_max_velocity` (currently per-axis, ~√2 in diagonal — accepted).
+1. **Feature D**: merged to `integration` (SITL validation abandoned — frame/toilet-bowl issues). **Field-test CRUISE on DAKEFPVH743**: confirm stick signs + brake-to-hold; flip a sign in `cruiseVelocityFromSticks()` if pitch/roll inverted. Optionally clamp diagonal velocity to `ap_max_velocity` (currently per-axis, ~√2 in diagonal — accepted).
 2. Periodically `git fetch upstream && git rebase upstream/master` each feature branch (do `git fetch --unshallow` first if shallow).
 3. Optional tool ideas: `ENABLE_X=0` toggles in the build tool for the few build-disableable features; pixel-accurate `.mcm` font in the OSD tool.
