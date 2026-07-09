@@ -84,8 +84,11 @@ static voltageMeter_t voltageMeter;
 #ifdef USE_BATTERY_IMPEDANCE
 static uint16_t powerSupplyImpedance = 0; // estimated battery internal resistance in milliohms (0 = not yet estimated)
 static uint16_t sagCompensatedVBat = 0;   // reconstructed no-load battery voltage in 0.01V units
-static pt1Filter_t impedanceFilter;       // smooths the raw dV/dI impedance samples
+static pt1Filter_t impedanceFilter;       // smooths the median-filtered dV/dI impedance samples
 static uint16_t impedanceSampleCount = 0; // number of accepted impedance samples so far
+#define IMPEDANCE_MEDIAN_WINDOW 5
+static int32_t impedanceRawHistory[IMPEDANCE_MEDIAN_WINDOW]; // rolling window of raw dV/dI samples, for outlier rejection
+static uint8_t impedanceRawHistoryIndex = 0;
 #endif
 
 static batteryState_e batteryState;
@@ -154,9 +157,13 @@ PG_RESET_TEMPLATE(batteryConfig_t, batteryConfig,
     .vbatDurationForWarning = 0,
     .vbatDurationForCritical = 0,
 #ifdef USE_BATTERY_IMPEDANCE
-    .batteryImpedanceCurrentThreshold = 200, // 2.00 A minimum current step (iNAV default)
-    .batteryImpedanceVoltageThreshold = 4,   // 0.04 V minimum voltage drop (iNAV default)
-    .batteryImpedanceLpfPeriod = 12,         // 1.2 s, matches iNAV's stable-state impedance filter time constant
+    .batteryImpedanceCurrentThreshold = 500, // 5.00 A minimum current step: iNAV's 2.00 A let small
+                                              // steps through, where ADC quantization noise dominates
+                                              // the dV/dI ratio; require a bigger, cleaner step.
+    .batteryImpedanceVoltageThreshold = 10,  // 0.10 V minimum voltage drop (was iNAV's 0.04 V), for
+                                              // the same reason: a small numerator is noise-dominated.
+    .batteryImpedanceLpfPeriod = 60,         // 6.0 s (5x iNAV's 1.2 s) for a much steadier reading,
+                                              // at the cost of slower convergence after a pack swap.
     .batteryImpedanceStableCount = 10,       // iNAV IMPEDANCE_STABLE_SAMPLE_COUNT_THRESH
 #endif
 );
@@ -528,8 +535,11 @@ void batteryInit(void)
 // Opportunistic estimate of the battery internal resistance from naturally occurring
 // throttle-induced current steps (no active load switching). When the current rises and the
 // voltage sags by more than the configured thresholds between two snapshots ~0.5 s apart,
-// Ohm's law gives R = dV / dI, which is smoothed by a PT1 filter. The reconstructed no-load
-// voltage (vbat + R * I) is then available for display / sag-aware readouts.
+// Ohm's law gives R = dV / dI. Each raw ratio is noisy (ADC/quantization error is amplified when
+// dV or dI is small, and the two-point measurement partly captures the cell's load-dependent
+// transient response, not just its ohmic resistance), so a median-of-5 rejects outliers before a
+// PT1 filter smooths the result. The reconstructed no-load voltage (vbat + R * I) is then
+// available for display / sag-aware readouts.
 static void batteryUpdateImpedance(timeUs_t currentTimeUs)
 {
     static timeUs_t recordTimestamp = 0;
@@ -552,6 +562,19 @@ static void batteryUpdateImpedance(timeUs_t currentTimeUs)
             // R[mOhm] = dV[0.01V] * 1000 / dI[0.01A]
             const int32_t impedanceSample = deltaV * 1000 / deltaI;
 
+            // Reject outliers before smoothing: keep a rolling window of the last
+            // IMPEDANCE_MEDIAN_WINDOW raw samples and take their median, rather than feeding the
+            // single (possibly noisy) sample straight into the PT1 below.
+            if (impedanceSampleCount == 0) {
+                for (uint8_t i = 0; i < IMPEDANCE_MEDIAN_WINDOW; i++) {
+                    impedanceRawHistory[i] = impedanceSample; // seed the whole window
+                }
+            } else {
+                impedanceRawHistory[impedanceRawHistoryIndex] = impedanceSample;
+                impedanceRawHistoryIndex = (impedanceRawHistoryIndex + 1) % IMPEDANCE_MEDIAN_WINDOW;
+            }
+            const int32_t impedanceSampleMedian = quickMedianFilter5(impedanceRawHistory);
+
             // Converge quickly while warming up, then relax to the configured time constant.
             const uint8_t lpfPeriod = (impedanceSampleCount < batteryConfig()->batteryImpedanceStableCount)
                 ? IMPEDANCE_WARMUP_LPF_PERIOD
@@ -560,11 +583,11 @@ static void batteryUpdateImpedance(timeUs_t currentTimeUs)
 
             if (impedanceSampleCount == 0) {
                 pt1FilterInit(&impedanceFilter, gain);
-                impedanceFilter.state = impedanceSample; // seed to avoid a slow ramp from zero
-                powerSupplyImpedance = impedanceSample;
+                impedanceFilter.state = impedanceSampleMedian; // seed to avoid a slow ramp from zero
+                powerSupplyImpedance = impedanceSampleMedian;
             } else {
                 pt1FilterUpdateCutoff(&impedanceFilter, gain);
-                powerSupplyImpedance = lrintf(pt1FilterApply(&impedanceFilter, impedanceSample));
+                powerSupplyImpedance = lrintf(pt1FilterApply(&impedanceFilter, impedanceSampleMedian));
             }
 
             if (impedanceSampleCount < UINT16_MAX) {
