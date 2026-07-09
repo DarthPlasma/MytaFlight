@@ -97,6 +97,11 @@ const char *adsbEmitterTypeString(uint8_t emitterType); // short class label for
 
 adsbVehicle_t *findVehicleClosestForDisplay(void);  // nearest vehicle passing the configured display limits
 uint8_t getVehiclesInDisplayRangeCount(void);       // active vehicles within the configured display limits
-bool adsbCriticalThreatDetected(void);              // an aircraft is approaching us (cone + ToA + vertical)
+
+// The vehicle on a critical approach course (cone + ToA + vertical), i.e. the aircraft that
+// would trigger the "AIRCRAFT APPROACHING" warning. When several vehicles qualify, the one with
+// the lowest time-to-arrival wins. Returns NULL if no vehicle qualifies. If non-NULL, *toaSecondsOut
+// (when provided) is set to that vehicle's time-to-arrival in seconds.
+adsbVehicle_t *findVehicleThreat(uint32_t *toaSecondsOut);
 
 #endif // USE_ADSB
