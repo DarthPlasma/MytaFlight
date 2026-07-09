@@ -66,9 +66,10 @@ The logic that can't be tested without ESP32 hardware is verified on the host:
   sketch): an approaching aircraft's distance and ToA fall and it flags as a threat; a receding one
   never does.
 
-Re-run both from the repo root:
+These live in `host-tests/` (a subfolder, so the Arduino IDE does NOT try to compile them as part
+of the sketch — it only builds the sketch root and `src/`). Re-run both from the repo root:
 ```
-clang -w -I lib/main/MAVLink mytaflight-tools/adsb-injector/adsb_wire_test.c -o /tmp/awt -lm && /tmp/awt
-clang -w mytaflight-tools/adsb-injector/motion_test.c -o /tmp/mt -lm && /tmp/mt
+clang -w -I lib/main/MAVLink mytaflight-tools/adsb-injector/host-tests/adsb_wire_test.c -o /tmp/awt -lm && /tmp/awt
+clang -w mytaflight-tools/adsb-injector/host-tests/motion_test.c -o /tmp/mt -lm && /tmp/mt
 ```
 (Both replicate the sketch's code verbatim — keep them in sync if you change the encoder or motion.)
