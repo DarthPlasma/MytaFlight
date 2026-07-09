@@ -313,8 +313,10 @@ adsbVehicle_t *findVehicleThreat(uint32_t *toaSecondsOut)
         if (vehicle->ttl == 0 || !vehicle->calculatedVehicleValues.valid) {
             continue;
         }
-        // c) aircraft not higher than our altitude + maxDistVertM (below us is always included)
-        if (vehicle->calculatedVehicleValues.verticalDistance >= (int32_t)adsbConfig()->maxDistVertM * 100) {
+        // c) within the same configured display range as findVehicleClosestForDisplay() /
+        //    getVehiclesInDisplayRangeCount(), so the threat, the "in range" count, and the
+        //    closest-for-display fallback all agree on what's in range.
+        if (!vehicleWithinDisplayLimits(vehicle)) {
             continue;
         }
         // b) time-to-arrival = distance / ground speed, must be within toaSeconds
