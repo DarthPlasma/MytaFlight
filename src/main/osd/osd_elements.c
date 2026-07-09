@@ -1935,10 +1935,14 @@ static void osdElementSys(osdElementParms_t *element)
 #ifdef USE_ADSB
 static void osdElementAdsbWarning(osdElementParms_t *element)
 {
-    // Show the closest tracked aircraft: an arrow pointing to it (relative to our heading),
-    // the horizontal distance, and the vertical separation. Nothing is shown when there is no
-    // traffic or no GPS fix (findVehicleClosestLimit returns NULL).
-    adsbVehicle_t *vehicle = findVehicleClosestForDisplay();
+    // Show the aircraft on a critical approach course, if any (the same one that triggers the
+    // "AIRCRAFT APPROACHING" warning), so the arrow/distance/vertical data always matches the
+    // active alert instead of possibly pointing at a closer-but-receding aircraft. Otherwise fall
+    // back to the closest tracked aircraft. Nothing is shown when there is no traffic/GPS fix.
+    adsbVehicle_t *vehicle = findVehicleThreat(NULL);
+    if (!vehicle) {
+        vehicle = findVehicleClosestForDisplay();
+    }
     if (!vehicle) {
         return;
     }
@@ -1955,9 +1959,13 @@ static void osdElementAdsbWarning(osdElementParms_t *element)
 
 static void osdElementAdsbInfo(osdElementParms_t *element)
 {
-    // Extended view of the closest aircraft: which way it is MOVING (relative to our heading),
-    // its class, ground speed and callsign.
-    adsbVehicle_t *vehicle = findVehicleClosestForDisplay();
+    // Extended view of the same vehicle shown by osdElementAdsbWarning (the active threat, if
+    // any, otherwise the closest tracked aircraft): which way it is MOVING (relative to our
+    // heading), its class, ground speed and callsign.
+    adsbVehicle_t *vehicle = findVehicleThreat(NULL);
+    if (!vehicle) {
+        vehicle = findVehicleClosestForDisplay();
+    }
     if (!vehicle) {
         return;
     }

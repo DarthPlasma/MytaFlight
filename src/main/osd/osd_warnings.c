@@ -235,8 +235,9 @@ void renderOsdWarning(char *warningText, bool *blinking, uint8_t *displayAttr)
     }
 
 #ifdef USE_ADSB
-    if (adsbCriticalThreatDetected()) {
-        tfp_sprintf(warningText, "AIRCRAFT APPROACHING");
+    uint32_t adsbThreatToaSeconds;
+    if (findVehicleThreat(&adsbThreatToaSeconds)) {
+        tfp_sprintf(warningText, "AIRCRAFT APPROACHING %us", adsbThreatToaSeconds);
         *displayAttr = DISPLAYPORT_SEVERITY_CRITICAL;
         *blinking = true;
         return;
