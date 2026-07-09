@@ -1990,6 +1990,22 @@ static void osdElementAdsbStatus(osdElementParms_t *element)
     // configured distance/height limits.
     tfp_sprintf(element->buff, "A%d/%d", getActiveVehiclesCount(), getVehiclesInDisplayRangeCount());
 }
+
+static void osdElementAdsbCriticalWarning(osdElementParms_t *element)
+{
+    // Dedicated, independently-positionable blinking warning for an aircraft on a critical
+    // approach course (cone + ToA + vertical). Decoupled from the generic OSD_WARNINGS element so
+    // it can't be pre-empted by higher-priority warnings and can be placed clear of other elements.
+    uint32_t toaSeconds;
+    if (findVehicleThreat(&toaSeconds)) {
+        tfp_sprintf(element->buff, "AIRCRAFT APPROACHING %us", toaSeconds);
+        element->attr = DISPLAYPORT_SEVERITY_CRITICAL;
+        SET_BLINK(OSD_ADSB_CRITICAL_WARNING);
+    } else {
+        element->buff[0] = '\0';   // no threat: render empty (clears the element's cells)
+        CLR_BLINK(OSD_ADSB_CRITICAL_WARNING);
+    }
+}
 #endif
 
 // Define the order in which the elements are drawn.
@@ -2040,6 +2056,7 @@ static const uint8_t osdElementDisplayOrder[] = {
     OSD_ADSB_WARNING,
     OSD_ADSB_INFO,
     OSD_ADSB_STATUS,
+    OSD_ADSB_CRITICAL_WARNING,
 #endif
     OSD_NUMERICAL_HEADING,
     OSD_READY_MODE,
@@ -2179,6 +2196,7 @@ const osdElementDrawFn osdElementDrawFunction[OSD_ITEM_COUNT] = {
     [OSD_ADSB_WARNING]            = osdElementAdsbWarning,
     [OSD_ADSB_INFO]               = osdElementAdsbInfo,
     [OSD_ADSB_STATUS]             = osdElementAdsbStatus,
+    [OSD_ADSB_CRITICAL_WARNING]   = osdElementAdsbCriticalWarning,
 #endif
 #ifdef USE_GPS
     [OSD_HOME_DIR]                = osdElementGpsHomeDirection,
