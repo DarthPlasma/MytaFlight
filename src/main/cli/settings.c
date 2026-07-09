@@ -1596,6 +1596,7 @@ const clivalue_t valueTable[] = {
     { "osd_adsb_warning_pos",       VAR_UINT16  | MASTER_VALUE, .config.minmaxUnsigned = { 0, OSD_POSCFG_MAX }, PG_OSD_ELEMENT_CONFIG, offsetof(osdElementConfig_t, item_pos[OSD_ADSB_WARNING]) },
     { "osd_adsb_info_pos",          VAR_UINT16  | MASTER_VALUE, .config.minmaxUnsigned = { 0, OSD_POSCFG_MAX }, PG_OSD_ELEMENT_CONFIG, offsetof(osdElementConfig_t, item_pos[OSD_ADSB_INFO]) },
     { "osd_adsb_status_pos",        VAR_UINT16  | MASTER_VALUE, .config.minmaxUnsigned = { 0, OSD_POSCFG_MAX }, PG_OSD_ELEMENT_CONFIG, offsetof(osdElementConfig_t, item_pos[OSD_ADSB_STATUS]) },
+    { "osd_adsb_critical_warning_pos", VAR_UINT16 | MASTER_VALUE, .config.minmaxUnsigned = { 0, OSD_POSCFG_MAX }, PG_OSD_ELEMENT_CONFIG, offsetof(osdElementConfig_t, item_pos[OSD_ADSB_CRITICAL_WARNING]) },
     { "adsb_max_dist_horiz",        VAR_UINT16  | MASTER_VALUE, .config.minmaxUnsigned = { 0, UINT16_MAX }, PG_ADSB_CONFIG, offsetof(adsbConfig_t, maxDistHorizM) },
     { "adsb_max_dist_vert",         VAR_UINT16  | MASTER_VALUE, .config.minmaxUnsigned = { 0, UINT16_MAX }, PG_ADSB_CONFIG, offsetof(adsbConfig_t, maxDistVertM) },
     { "adsb_detection_cone",        VAR_UINT16  | MASTER_VALUE, .config.minmaxUnsigned = { 0, 18000 }, PG_ADSB_CONFIG, offsetof(adsbConfig_t, detectionCone) },
