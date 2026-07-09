@@ -256,6 +256,7 @@ const OTHER = [
   [["USE_LED_STRIP"], "LED Strip", false],
   [["USE_LED_STRIP_64"], "LED Strip (64)", false],
   [["USE_MAG"], "Magnetometers", true],
+  [["OSD_CANVAS_TOOL"], "OSD canvas size CLI (osd_canvas_width/height) — essential for WTFOS/HDZero/analog", true],
   [["USE_OPTICALFLOW"], "Optical Flow", false],
   [["USE_PINIO"], "Pin IO", false],
   [["USE_POSITION_HOLD"], "Position hold", true],

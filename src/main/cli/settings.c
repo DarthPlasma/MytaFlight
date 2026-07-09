@@ -1731,7 +1731,11 @@ const clivalue_t valueTable[] = {
     { "osd_aux_channel",            VAR_UINT8  | MASTER_VALUE, .config.minmaxUnsigned = { 1, MAX_SUPPORTED_RC_CHANNEL_COUNT }, PG_OSD_CONFIG, offsetof(osdConfig_t, aux_channel) },
     { "osd_aux_scale",              VAR_UINT16 | MASTER_VALUE, .config.minmaxUnsigned = { 1, 1000 }, PG_OSD_CONFIG, offsetof(osdConfig_t, aux_scale) },
     { "osd_aux_symbol",             VAR_UINT8  | MASTER_VALUE, .config.minmaxUnsigned = { 0, 255 },  PG_OSD_CONFIG, offsetof(osdConfig_t, aux_symbol) },
-#ifdef OSD_CANVAS_SIZE_DEBUG
+// Upstream gates these behind OSD_CANVAS_SIZE_DEBUG. This fork also exposes them under
+// OSD_CANVAS_TOOL (set by the build tool's "OSD canvas size CLI" checkbox) so the OSD layout
+// tool's `set osd_canvas_width/height` lines work — needed to size the grid for WTFOS/HDZero/
+// analog, where the canvas isn't auto-negotiated the way DJI does it.
+#if defined(OSD_CANVAS_TOOL) || defined(OSD_CANVAS_SIZE_DEBUG)
     { "osd_canvas_width",           VAR_UINT8  | MASTER_VALUE, .config.minmaxUnsigned = { 0, 63 }, PG_OSD_CONFIG, offsetof(osdConfig_t, canvas_cols) },
     { "osd_canvas_height",          VAR_UINT8  | MASTER_VALUE, .config.minmaxUnsigned = { 0, 31 }, PG_OSD_CONFIG, offsetof(osdConfig_t, canvas_rows) },
 #endif
