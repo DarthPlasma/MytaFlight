@@ -68,7 +68,7 @@
           <option value="30,16">Analog PAL — 30×16</option>
           <option value="30,13">Analog NTSC — 30×13</option>
           <option value="50,18">HDZero — 50×18</option>
-          <option value="53,20" selected>DJI O3/O4 — 53×20</option>
+          <option value="53,20" data-canvas="skip" selected>DJI O3/O4 — 53×20</option>
           <option value="60,22">WTF-OS (DJI FPV) — 60×22</option>
           <option value="53,20b">Walksnail — 53×20</option>
           <option value="35,24">Walksnail (tall) — 35×24</option>
@@ -299,9 +299,23 @@ function renderList(){
   });
 }
 
+// osd_canvas_width/osd_canvas_height (osd.h: canvas_cols/canvas_rows) tell the FC how many
+// characters the connected display can show; elements beyond canvas_rows get collapsed onto the
+// last row instead of drawn where placed. DJI O3/O4 negotiate their own canvas over MSP and
+// ignore/override these, so they're left at firmware default (not emitted) for that preset.
+function canvasSetLines(){
+  const opt = $('preset').selectedOptions[0];
+  if (opt && opt.dataset.canvas === 'skip') return [];
+  return [
+    '# canvas size for the selected video system (osd.h: canvas_cols/canvas_rows)',
+    `set osd_canvas_width = ${COLS}`,
+    `set osd_canvas_height = ${ROWS}`,
+  ];
+}
 function renderOutput(){
-  $('output').value = elements.slice().sort((a,b)=>a.name.localeCompare(b.name))
-    .map(el=>`set ${el.name} = ${valueOf(el)}`).join('\n');
+  const posLines = elements.slice().sort((a,b)=>a.name.localeCompare(b.name))
+    .map(el=>`set ${el.name} = ${valueOf(el)}`);
+  $('output').value = [...canvasSetLines(), ...posLines].join('\n');
 }
 function syncDatalist(){
   $('known').innerHTML = [...Object.keys(SAMPLES), ...Object.keys(MULTICELL)].map(n=>`<option value="${n}">`).join('');
