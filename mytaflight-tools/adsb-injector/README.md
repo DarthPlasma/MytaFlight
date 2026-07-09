@@ -39,7 +39,7 @@ TX-only — the injector never reads from the FC. Use any spare FC UART.
 
 ## Using it
 1. Flash `adsb-injector.ino` (Arduino IDE, board "ESP32 Dev Module"; no external libraries).
-2. Join WiFi **`MyTAflight-ADSB`** (password `adsbtest`), open **http://192.168.4.1**.
+2. Join WiFi **`MyTAflight-ADSB`** (password `adsbtest`), open **http://10.0.0.1**.
 3. Set your **home** lat/lon (roughly where the FC thinks it is).
 4. Fill each aircraft, or use the **helper**: pick a slot, a distance + bearing from home, tick
    *in avvicinamento* to auto-aim its heading back at you, press **Calcola lat/lon**, then

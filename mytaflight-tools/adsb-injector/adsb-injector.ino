@@ -355,6 +355,7 @@ void setup() {
   ac[0].headingDeg = 225;
 
   WiFi.mode(WIFI_AP);
+  WiFi.softAPConfig(IPAddress(10, 0, 0, 1), IPAddress(10, 0, 0, 1), IPAddress(255, 255, 255, 0));
   WiFi.softAP(AP_SSID, AP_PASS);
   Serial.print("AP up: "); Serial.print(AP_SSID);
   Serial.print("  http://"); Serial.println(WiFi.softAPIP());
