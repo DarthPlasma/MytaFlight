@@ -23,7 +23,8 @@ PORT = 8792
 
 # Only these targets, as requested. Each verified to build with the tool's default option set.
 TARGETS = ["DAKEFPVH743", "TMOTORVELOXF7V2", "KAKUTEH7", "MAMBAH743", "MAMBAH743_2022B",
-           "IFLIGHT_BLITZ_H7_PRO", "MATEKH743", "SPEEDYBEEF405V4", "HGLRC_H743_LITE", "FOXEERF745V4_AIO"]
+           "IFLIGHT_BLITZ_H7_PRO", "MATEKH743", "SPEEDYBEEF405V4", "HGLRC_H743_LITE", "FOXEERF745V4_AIO",
+           "BETAFPVH743", "TMOTORH743", "FLYWOOH743PRO", "GEPRC_TAKER_H743"]
 
 # Whitelist of build flags the UI (and free-text custom defines) may pass. Guards the make
 # invocation. Allows an optional "=VALUE" for defines that take a value (e.g. TARGET_FLASH_SIZE=2048).
