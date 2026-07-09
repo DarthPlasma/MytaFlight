@@ -304,10 +304,12 @@ uint8_t getVehiclesInDisplayRangeCount(void)
     return count;
 }
 
-bool adsbCriticalThreatDetected(void)
+adsbVehicle_t *findVehicleThreat(uint32_t *toaSecondsOut)
 {
+    adsbVehicle_t *threat = NULL;
+    uint32_t threatToa = 0;
     for (int i = 0; i < ADSB_MAX_VEHICLES; i++) {
-        const adsbVehicle_t *vehicle = &vehiclesList[i];
+        adsbVehicle_t *vehicle = &vehiclesList[i];
         if (vehicle->ttl == 0 || !vehicle->calculatedVehicleValues.valid) {
             continue;
         }
@@ -333,9 +335,16 @@ bool adsbCriticalThreatDetected(void)
         if (ABS(headingError) > adsbConfig()->detectionCone / 2) {
             continue;
         }
-        return true;
+        // Among all qualifying vehicles, keep the one with the lowest time-to-arrival.
+        if (!threat || timeToArrival < threatToa) {
+            threat = vehicle;
+            threatToa = timeToArrival;
+        }
     }
-    return false;
+    if (toaSecondsOut) {
+        *toaSecondsOut = threatToa;
+    }
+    return threat;
 }
 
 #endif // USE_ADSB
