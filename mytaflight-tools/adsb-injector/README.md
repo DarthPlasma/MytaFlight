@@ -9,6 +9,15 @@ Because ADS-B threat prioritization (nearest time-to-arrival within the cone) on
 several aircraft, the injector sends up to 5 at once (Betaflight's `ADSB_MAX_VEHICLES`) and lets
 you place them relative to a home point, optionally pointed straight at you ("approaching").
 
+**Moving targets:** press **Avvia** and each aircraft flies along its heading at its ground speed
+(and climbs/descends at its V/S) — the position advances every tick and keeps being transmitted.
+A live table shows each aircraft's distance / bearing / altitude / time-to-arrival updating in real
+time, plus a **Minaccia** flag computed the same way Betaflight does (within the cone AND ToA ≤
+threshold), so you can watch a threat develop and cross-check it against what the OSD shows.
+**Pausa** freezes them; **Reset posizioni** returns every aircraft to the values from the last
+Aggiorna. The cone (°) and ToA-max (s) inputs should mirror your FC's `adsb_detection_cone` /
+`adsb_aircraft_toa` so the predictor matches the firmware.
+
 ## Wiring
 ```
 ESP32 GPIO17 (TX2) ─────────────▶ FC UART RX pad
@@ -42,18 +51,24 @@ Units are converted to MAVLink's on the wire (deg→degE7, m→mm, km/h→cm/s, 
 auto-assigned per slot (`0xA00001+n`) so each slot is a distinct tracked vehicle. `Tipo` is the
 MAVLink `ADSB_EMITTER_TYPE` (Light/Small/Large/Heavy/Rotorcraft/…).
 
-### Testing the threat logic
-Enable two aircraft: one **closer but receding** (heading away, low speed) and one **farther but
-approaching fast within the cone** (helper with *in avvicinamento*). Confirm the OSD arrow/info and
-the `AIRCRAFT APPROACHING <s>` warning both track the *approaching* one, not the closest — the
-behaviour added in the threat-priority fix.
+### Testing the threat logic (with movement)
+Enable two aircraft: one **closer but receding** (heading away) and one **farther but approaching
+fast within the cone** (helper with *in avvicinamento*), press **Avvia**, and watch. As the second
+closes in, its live ToA falls until it flags **Minaccia**; confirm the OSD arrow/info and the
+`AIRCRAFT APPROACHING <s>` warning both switch to track the *approaching* one, not the closest —
+the behaviour added in the threat-priority fix — and that the OSD's ToA tracks the injector's.
 
-## Wire-format validation
-`adsb_wire_test.c` proves the exact bytes the ESP32 sends decode correctly in Betaflight's **own**
-bundled MAVLink parser (byte layout + X25 CRC + CRC_EXTRA 184), so the frames can't be silently
-dropped. Re-run from the repo root:
+## Validation
+The logic that can't be tested without ESP32 hardware is verified on the host:
+- **`adsb_wire_test.c`** — the exact bytes the sketch emits, decoded by Betaflight's OWN bundled
+  MAVLink parser (byte layout + X25 CRC + CRC_EXTRA 184). `PASS: 10/10`.
+- **`motion_test.c`** — the movement/geometry/threat-predictor logic (copied verbatim from the
+  sketch): an approaching aircraft's distance and ToA fall and it flags as a threat; a receding one
+  never does.
+
+Re-run both from the repo root:
 ```
-clang -w -I lib/main/MAVLink mytaflight-tools/adsb-injector/adsb_wire_test.c -o /tmp/adsb_wire_test -lm && /tmp/adsb_wire_test
+clang -w -I lib/main/MAVLink mytaflight-tools/adsb-injector/adsb_wire_test.c -o /tmp/awt -lm && /tmp/awt
+clang -w mytaflight-tools/adsb-injector/motion_test.c -o /tmp/mt -lm && /tmp/mt
 ```
-Expect `PASS: 10/10 checks passed`. (It replicates the sketch's encoder verbatim, so keep the two
-in sync if you change the frame.)
+(Both replicate the sketch's code verbatim — keep them in sync if you change the encoder or motion.)
