@@ -138,7 +138,7 @@ PAGE = r"""<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
 
  <div class="panel"><h2>Custom features (this fork)</h2>
    <div class="grid" id="grp-custom"></div>
-   <p class="muted">Battery impedance is always compiled in (unconditional in this fork) — not a toggle.</p>
+   <p class="muted">Battery impedance is always compiled in (unconditional in this fork) — not a toggle. ADS-B automatically pulls in GPS and MAVLink telemetry (it receives traffic over MAVLink, so it's useless without them).</p>
  </div>
 
  <div class="panel"><h2>Other options</h2><div class="grid" id="grp-other"></div></div>
@@ -338,8 +338,14 @@ function computeOptions(){
   // Cruise needs Position Hold compiled in, regardless of that checkbox's own state.
   if (cruiseChecked) opts.push("USE_POSITION_HOLD");
 
-  // ADS-B needs GPS on every board.
-  if (opts.includes("USE_ADSB") && !opts.includes("USE_GPS")) opts.push("USE_GPS");
+  // ADS-B needs GPS on every board, and receives ADSB_VEHICLE frames over MAVLink telemetry
+  // (telemetry/mavlink.c, gated by USE_TELEMETRY_MAVLINK) — useless without it, so pull both in
+  // regardless of the telemetry dropdown. It coexists with the radio's own telemetry (other port).
+  if (opts.includes("USE_ADSB")) {
+    if (!opts.includes("USE_GPS")) opts.push("USE_GPS");
+    if (!opts.includes("USE_TELEMETRY_MAVLINK")) opts.push("USE_TELEMETRY_MAVLINK");
+    if (!opts.includes("USE_TELEMETRY")) opts.push("USE_TELEMETRY");
+  }
 
   // Position Hold (and so Cruise, which forces it above) needs a position source: GPS or
   // Optical Flow. Without either, common_post.h's #error stops the build.
