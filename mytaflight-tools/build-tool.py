@@ -28,7 +28,10 @@ TARGETS = ["DAKEFPVH743", "TMOTORVELOXF7V2", "KAKUTEH7", "MAMBAH743", "MAMBAH743
            "BETAFPVF405",  # Pavo20 / Pavo20 Pro's actual FC
            "TMOTORF7_AIO", "TMOTORVELOXF7SE",
            "GEPRC_TAKER_H743V2", "GEPRCF745_BT_HD",
-           "KAKUTEF7"]
+           "KAKUTEF7",
+           "FLYWOOF411",       # original Explorer LR (GOKU F411 Micro Stack)
+           "FLYWOOF745AIOV2",  # Explorer LR 4" V2 HD (GOKU F7 16x16 stack)
+           "FLYWOOF722PROV2"]  # Explorer LR 4" O4 Pro (GOKU F722 Mini 45A stack)
 
 # Whitelist of build flags the UI (and free-text custom defines) may pass. Guards the make
 # invocation. Allows an optional "=VALUE" for defines that take a value (e.g. TARGET_FLASH_SIZE=2048).
