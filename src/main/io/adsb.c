@@ -54,6 +54,7 @@ PG_RESET_TEMPLATE(adsbConfig_t, adsbConfig,
     .maxDistVertM  = 2000,  // 2 km above us
     .detectionCone = 2000,  // +/-10 degrees
     .toaSeconds    = 60,
+    .maxVehicles   = ADSB_DEFAULT_MAX_VEHICLES,
 );
 
 // Our own altitude (ASL, cm) from the fused estimate: home altitude (ASL) plus the
@@ -106,7 +107,7 @@ const char *adsbEmitterTypeString(uint8_t emitterType)
 
 static adsbVehicle_t *findVehicleByIcao(uint32_t icao)
 {
-    for (int i = 0; i < ADSB_MAX_VEHICLES; i++) {
+    for (int i = 0; i < adsbConfig()->maxVehicles; i++) {
         if (vehiclesList[i].ttl > 0 && vehiclesList[i].vehicleValues.icao == icao) {
             return &vehiclesList[i];
         }
@@ -132,7 +133,7 @@ adsbVehicle_t *findVehicle(uint8_t index)
 uint8_t getActiveVehiclesCount(void)
 {
     uint8_t count = 0;
-    for (int i = 0; i < ADSB_MAX_VEHICLES; i++) {
+    for (int i = 0; i < adsbConfig()->maxVehicles; i++) {
         if (vehiclesList[i].ttl > 0) {
             count++;
         }
@@ -164,7 +165,7 @@ void recalculateVehicle(adsbVehicle_t *vehicle)
     // "valid" just means distance/bearing were computed (we have a GPS fix). Do NOT evict distant
     // traffic here: getActiveVehiclesCount() ("A<x>/...") must reflect everything received over
     // MAVLink, however far. Display/threat filtering by distance & height is done separately by
-    // vehicleWithinDisplayLimits(); the 5 slots are recycled via TTL + adsbNewVehicle()'s
+    // vehicleWithinDisplayLimits(); the tracking slots are recycled via TTL + adsbNewVehicle()'s
     // farthest-first eviction when a new aircraft needs a slot.
     vehicle->calculatedVehicleValues.valid = true;
 }
@@ -195,14 +196,14 @@ void adsbNewVehicle(adsbVehicleValues_t *vehicleValues)
 
     // Not already tracked: pick a slot — free first, then an un-calculated one, then evict the farthest.
     if (!slot) {
-        for (int i = 0; i < ADSB_MAX_VEHICLES && !slot; i++) {
+        for (int i = 0; i < adsbConfig()->maxVehicles && !slot; i++) {
             if (vehiclesList[i].ttl == 0) {
                 slot = &vehiclesList[i];
             }
         }
     }
     if (!slot) {
-        for (int i = 0; i < ADSB_MAX_VEHICLES && !slot; i++) {
+        for (int i = 0; i < adsbConfig()->maxVehicles && !slot; i++) {
             if (!vehiclesList[i].calculatedVehicleValues.valid) {
                 slot = &vehiclesList[i];
             }
@@ -210,7 +211,7 @@ void adsbNewVehicle(adsbVehicleValues_t *vehicleValues)
     }
     if (!slot && isEnvironmentOkForCalculatingADSBDistanceBearing()) {
         uint32_t farthest = 0;
-        for (int i = 0; i < ADSB_MAX_VEHICLES; i++) {
+        for (int i = 0; i < adsbConfig()->maxVehicles; i++) {
             if (vehiclesList[i].calculatedVehicleValues.dist >= farthest) {
                 farthest = vehiclesList[i].calculatedVehicleValues.dist;
                 slot = &vehiclesList[i];
@@ -231,7 +232,7 @@ void adsbNewVehicle(adsbVehicleValues_t *vehicleValues)
 adsbVehicle_t *findVehicleClosestLimit(int32_t maxVerticalDistance)
 {
     adsbVehicle_t *closest = NULL;
-    for (int i = 0; i < ADSB_MAX_VEHICLES; i++) {
+    for (int i = 0; i < adsbConfig()->maxVehicles; i++) {
         adsbVehicle_t *vehicle = &vehiclesList[i];
         if (vehicle->ttl == 0 || !vehicle->calculatedVehicleValues.valid) {
             continue;
@@ -254,7 +255,7 @@ void adsbTtlClean(timeUs_t currentTimeUs)
     }
     lastCleanUs = currentTimeUs;
 
-    for (int i = 0; i < ADSB_MAX_VEHICLES; i++) {
+    for (int i = 0; i < adsbConfig()->maxVehicles; i++) {
         if (vehiclesList[i].ttl > 0) {
             vehiclesList[i].ttl--;
             recalculateVehicle(&vehiclesList[i]);
@@ -278,7 +279,7 @@ static bool vehicleWithinDisplayLimits(const adsbVehicle_t *vehicle)
 adsbVehicle_t *findVehicleClosestForDisplay(void)
 {
     adsbVehicle_t *closest = NULL;
-    for (int i = 0; i < ADSB_MAX_VEHICLES; i++) {
+    for (int i = 0; i < adsbConfig()->maxVehicles; i++) {
         adsbVehicle_t *vehicle = &vehiclesList[i];
         if (vehicle->ttl == 0 || !vehicle->calculatedVehicleValues.valid || !vehicleWithinDisplayLimits(vehicle)) {
             continue;
@@ -293,7 +294,7 @@ adsbVehicle_t *findVehicleClosestForDisplay(void)
 uint8_t getVehiclesInDisplayRangeCount(void)
 {
     uint8_t count = 0;
-    for (int i = 0; i < ADSB_MAX_VEHICLES; i++) {
+    for (int i = 0; i < adsbConfig()->maxVehicles; i++) {
         adsbVehicle_t *vehicle = &vehiclesList[i];
         if (vehicle->ttl > 0 && vehicle->calculatedVehicleValues.valid && vehicleWithinDisplayLimits(vehicle)) {
             count++;
@@ -306,7 +307,7 @@ adsbVehicle_t *findVehicleThreat(uint32_t *toaSecondsOut)
 {
     adsbVehicle_t *threat = NULL;
     uint32_t threatToa = 0;
-    for (int i = 0; i < ADSB_MAX_VEHICLES; i++) {
+    for (int i = 0; i < adsbConfig()->maxVehicles; i++) {
         adsbVehicle_t *vehicle = &vehiclesList[i];
         if (vehicle->ttl == 0 || !vehicle->calculatedVehicleValues.valid) {
             continue;
