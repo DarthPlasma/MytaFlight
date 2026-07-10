@@ -1977,6 +1977,85 @@ static void osdElementAdsbCriticalWarning(osdElementParms_t *element)
         CLR_BLINK(OSD_ADSB_CRITICAL_WARNING);
     }
 }
+
+static void osdElementAdsbCone(osdElementParms_t *element)
+{
+    // Two-row "collision cone", shown only while an aircraft is a critical threat.
+    // Row 1 (this element's buffer): a numeric scale spanning the detection cone,
+    //   -X ... 0 ... +X, where X = round(detectionCone / 2) in degrees.
+    // Row 2 (drawn one line below): a single arrow whose COLUMN is the threat's
+    //   position inside the cone (its heading error vs. the head-on collision
+    //   course, 0 = dead centre) and whose DIRECTION encodes the angle between our
+    //   motion vector and the aircraft's: opposed (head-on, 180 deg) -> arrow up;
+    //   aligned (same course, 0 deg) -> arrow down; crossing traffic -> to that side.
+    static bool wasShown = false;
+
+    const uint8_t barWidth = 21;             // odd -> exact centre column
+    const uint8_t centre = barWidth / 2;
+
+    adsbVehicle_t *vehicle = findVehicleThreat(NULL);
+
+    if (!vehicle) {
+        if (wasShown) {
+            // One-off clear of both rows when the threat disappears.
+            for (uint8_t i = 0; i < barWidth; i++) {
+                element->buff[i] = ' ';
+                osdDisplayWriteChar(element, element->elemPosX + i, element->elemPosY + 1, DISPLAYPORT_SEVERITY_NORMAL, ' ');
+            }
+            element->buff[barWidth] = '\0';
+            wasShown = false;
+        } else {
+            element->buff[0] = '\0';         // idle: draw nothing, don't clobber neighbouring elements
+        }
+        return;
+    }
+    wasShown = true;
+
+    int coneHalfDeg = (adsbConfig()->detectionCone + 100) / 200;   // half-cone, degrees, rounded
+    if (coneHalfDeg < 1) {
+        coneHalfDeg = 1;
+    }
+
+    // Row 1: "-X" ... "0" ... "+X" over a dashed scale.
+    char *buff = element->buff;
+    for (uint8_t i = 0; i < barWidth; i++) {
+        buff[i] = '-';
+    }
+    buff[barWidth] = '\0';
+    buff[centre] = '0';
+    char num[8];
+    int len = tfp_sprintf(num, "-%d", coneHalfDeg);
+    for (int i = 0; i < len && i < centre; i++) {
+        buff[i] = num[i];
+    }
+    len = tfp_sprintf(num, "+%d", coneHalfDeg);
+    for (int i = 0; i < len; i++) {
+        const int col = barWidth - len + i;
+        if (col > centre) {
+            buff[col] = num[i];
+        }
+    }
+
+    // Threat's position in the cone: heading error vs. the reciprocal bearing (as in findVehicleThreat).
+    int32_t headingError = (int32_t)vehicle->vehicleValues.heading - (vehicle->calculatedVehicleValues.dir + 18000);
+    headingError = ((headingError % 36000) + 36000) % 36000;
+    if (headingError > 18000) {
+        headingError -= 36000;
+    }
+    const int errDeg = constrain((int)(headingError / 100), -coneHalfDeg, coneHalfDeg);
+    const uint8_t arrowCol = constrain(centre + (errDeg * centre) / coneHalfDeg, 0, barWidth - 1);
+
+    // Arrow direction = angle between our motion vector and the aircraft's.
+    // screenAngle: 0 = up (opposed / head-on), 180 = down (same course), 90 = crossing right.
+    int screenAngle = 180 - (vehicle->vehicleValues.heading / 100) + (attitude.values.yaw / 10);
+    screenAngle = ((screenAngle % 360) + 360) % 360;
+    const uint8_t arrow = osdGetDirectionSymbolFromHeading(screenAngle);
+
+    // Row 2: arrow at its column, blanks elsewhere (also clears any previous arrow position).
+    for (uint8_t i = 0; i < barWidth; i++) {
+        osdDisplayWriteChar(element, element->elemPosX + i, element->elemPosY + 1, DISPLAYPORT_SEVERITY_NORMAL, (i == arrowCol) ? arrow : ' ');
+    }
+}
 #endif
 
 // Define the order in which the elements are drawn.
@@ -2024,6 +2103,7 @@ static const uint8_t osdElementDisplayOrder[] = {
     OSD_ADSB_INFO,
     OSD_ADSB_STATUS,
     OSD_ADSB_CRITICAL_WARNING,
+    OSD_ADSB_CONE,
 #endif
     OSD_NUMERICAL_HEADING,
     OSD_READY_MODE,
@@ -2157,6 +2237,7 @@ const osdElementDrawFn osdElementDrawFunction[OSD_ITEM_COUNT] = {
     [OSD_ADSB_INFO]               = osdElementAdsbInfo,
     [OSD_ADSB_STATUS]             = osdElementAdsbStatus,
     [OSD_ADSB_CRITICAL_WARNING]   = osdElementAdsbCriticalWarning,
+    [OSD_ADSB_CONE]               = osdElementAdsbCone,
 #endif
 #ifdef USE_GPS
     [OSD_HOME_DIR]                = osdElementGpsHomeDirection,
