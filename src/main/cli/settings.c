@@ -1612,6 +1612,7 @@ const clivalue_t valueTable[] = {
     { "adsb_max_dist_vert",         VAR_UINT16  | MASTER_VALUE, .config.minmaxUnsigned = { 0, UINT16_MAX }, PG_ADSB_CONFIG, offsetof(adsbConfig_t, maxDistVertM) },
     { "adsb_detection_cone",        VAR_UINT16  | MASTER_VALUE, .config.minmaxUnsigned = { 0, 18000 }, PG_ADSB_CONFIG, offsetof(adsbConfig_t, detectionCone) },
     { "adsb_aircraft_toa",          VAR_UINT16  | MASTER_VALUE, .config.minmaxUnsigned = { 0, UINT16_MAX }, PG_ADSB_CONFIG, offsetof(adsbConfig_t, toaSeconds) },
+    { "adsb_max_vehicle",           VAR_UINT8   | MASTER_VALUE, .config.minmaxUnsigned = { ADSB_MIN_VEHICLES, ADSB_MAX_VEHICLES }, PG_ADSB_CONFIG, offsetof(adsbConfig_t, maxVehicles) },
 #endif
     { "osd_flight_dist_pos",        VAR_UINT16  | MASTER_VALUE, .config.minmaxUnsigned = { 0, OSD_POSCFG_MAX }, PG_OSD_ELEMENT_CONFIG, offsetof(osdElementConfig_t, item_pos[OSD_FLIGHT_DIST]) },
     { "osd_compass_bar_pos",        VAR_UINT16  | MASTER_VALUE, .config.minmaxUnsigned = { 0, OSD_POSCFG_MAX }, PG_OSD_ELEMENT_CONFIG, offsetof(osdElementConfig_t, item_pos[OSD_COMPASS_BAR]) },
