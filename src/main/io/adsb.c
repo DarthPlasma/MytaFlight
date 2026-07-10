@@ -46,8 +46,6 @@
 #define ADSB_FLAGS_VALID_COORDS   1
 #define ADSB_FLAGS_VALID_ALTITUDE 2
 #define ADSB_FLAGS_VALID_CALLSIGN 16
-// Drop vehicles farther than this (64 km), beyond useful traffic-awareness range.
-#define ADSB_LIMIT_CM (64L * 1000 * 100)
 
 PG_REGISTER_WITH_RESET_TEMPLATE(adsbConfig_t, adsbConfig, PG_ADSB_CONFIG, 0);
 
@@ -163,12 +161,12 @@ void recalculateVehicle(adsbVehicle_t *vehicle)
     // ADSB altitude is mm ASL; our fused altitude is cm ASL. Positive = aircraft above us.
     vehicle->calculatedVehicleValues.verticalDistance = (vehicle->vehicleValues.alt / 10) - ourAltitudeAslCm();
 
-    if (dist > ADSB_LIMIT_CM) {
-        vehicle->ttl = 0;
-        vehicle->calculatedVehicleValues.valid = false;
-    } else {
-        vehicle->calculatedVehicleValues.valid = true;
-    }
+    // "valid" just means distance/bearing were computed (we have a GPS fix). Do NOT evict distant
+    // traffic here: getActiveVehiclesCount() ("A<x>/...") must reflect everything received over
+    // MAVLink, however far. Display/threat filtering by distance & height is done separately by
+    // vehicleWithinDisplayLimits(); the 5 slots are recycled via TTL + adsbNewVehicle()'s
+    // farthest-first eviction when a new aircraft needs a slot.
+    vehicle->calculatedVehicleValues.valid = true;
 }
 
 void adsbNewVehicle(adsbVehicleValues_t *vehicleValues)
