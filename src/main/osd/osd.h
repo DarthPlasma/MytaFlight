@@ -228,6 +228,7 @@ typedef enum {
     OSD_ADSB_INFO,              // Nearest ADS-B traffic (extended): movement, class, speed, callsign
     OSD_ADSB_STATUS,            // ADS-B traffic counts: detected / within configured limits
     OSD_ADSB_CRITICAL_WARNING,  // Dedicated blinking "AIRCRAFT APPROACHING <s>" for an approaching threat
+    OSD_ADSB_CONE,              // Two-row cone display: threat position in the detection cone + our relative-motion arrow
 #endif
 
     OSD_ITEM_COUNT // MUST BE LAST
