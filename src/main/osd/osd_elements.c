@@ -1568,8 +1568,11 @@ static void osdElementMainBatteryVoltage(osdElementParms_t *element)
 #ifdef USE_BATTERY_IMPEDANCE
 static void osdElementBatteryImpedance(osdElementParms_t *element)
 {
-    // Battery internal resistance in milliohms. The OSD font has no ohm glyph, so use "mR".
-    tfp_sprintf(element->buff, "%4dmR", getBatteryImpedance());
+    // Battery internal resistance, shown in ohms as "<x>.<mmm>R" (e.g. 14 mohm -> "0.014R").
+    // The OSD font has no ohm glyph, so 'R' stands in for it; we avoid a milli- prefix because
+    // lowercase 'm' (0x6D) is a special glyph in the OSD font (an arrow), not the letter.
+    const int milliohms = getBatteryImpedance();
+    tfp_sprintf(element->buff, "%d.%03uR", milliohms / 1000, (unsigned)(milliohms % 1000));
 }
 
 static void osdElementSagCompensatedBatteryVoltage(osdElementParms_t *element)
