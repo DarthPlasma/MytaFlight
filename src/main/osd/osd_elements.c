@@ -2004,7 +2004,9 @@ static void osdElementAdsbCriticalWarning(osdElementParms_t *element)
     // rendered blank (invisible). NORMAL uses the base font, so the warning actually shows.
     uint32_t toaSeconds;
     if (findVehicleThreat(&toaSeconds)) {
-        tfp_sprintf(element->buff, "AIRCRAFT APPROACHING %us", toaSeconds);
+        // Uppercase 'S' for seconds: lowercase letters 0x60-0x7A are special glyphs in the OSD
+        // font (e.g. 's' 0x73 = artificial-horizon centre), so OSD text must be all-caps.
+        tfp_sprintf(element->buff, "AIRCRAFT APPROACHING %uS", toaSeconds);
     } else {
         element->buff[0] = '\0';   // no threat: render empty (clears the element's cells)
     }
