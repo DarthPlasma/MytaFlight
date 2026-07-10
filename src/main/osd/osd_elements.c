@@ -1993,96 +1993,98 @@ static void osdElementAdsbStatus(osdElementParms_t *element)
 
 static void osdElementAdsbCriticalWarning(osdElementParms_t *element)
 {
-    // Dedicated, independently-positionable blinking warning for an aircraft on a critical
-    // approach course (cone + ToA + vertical). Decoupled from the generic OSD_WARNINGS element so
-    // it can't be pre-empted by higher-priority warnings and can be placed clear of other elements.
+    // Dedicated, independently-positionable warning for an aircraft on a critical approach course
+    // (cone + ToA + vertical). Decoupled from the generic OSD_WARNINGS element so it can't be
+    // pre-empted by higher-priority warnings and can be placed clear of other elements. Steady
+    // (not blinking): blinking was getting dropped/hidden on MSP DisplayPort, and steady reads better.
     uint32_t toaSeconds;
     if (findVehicleThreat(&toaSeconds)) {
         tfp_sprintf(element->buff, "AIRCRAFT APPROACHING %us", toaSeconds);
         element->attr = DISPLAYPORT_SEVERITY_CRITICAL;
-        SET_BLINK(OSD_ADSB_CRITICAL_WARNING);
     } else {
         element->buff[0] = '\0';   // no threat: render empty (clears the element's cells)
-        CLR_BLINK(OSD_ADSB_CRITICAL_WARNING);
     }
 }
 
 static void osdElementAdsbCone(osdElementParms_t *element)
 {
     // Two-row "collision cone", shown only while an aircraft is a critical threat.
-    // Row 1 (this element's buffer): a numeric scale spanning the detection cone,
-    //   -X ... 0 ... +X, where X = round(detectionCone / 2) in degrees.
-    // Row 2 (drawn one line below): a single arrow whose COLUMN is the threat's
-    //   position inside the cone (its heading error vs. the head-on collision
-    //   course, 0 = dead centre) and whose DIRECTION encodes the angle between our
-    //   motion vector and the aircraft's: opposed (head-on, 180 deg) -> arrow up;
-    //   aligned (same course, 0 deg) -> arrow down; crossing traffic -> to that side.
-    static bool wasShown = false;
+    //   Row 1: numeric scale spanning the detection cone, -X ... 0 ... +X, X = round(cone/2) deg.
+    //   Row 2: an arrow whose COLUMN is the threat's position in the cone (its heading error vs.
+    //          the head-on collision course, 0 = dead centre) and whose DIRECTION is the angle
+    //          between our motion vector and the aircraft's (opposed/head-on -> up, same course ->
+    //          down, crossing -> to that side). If our own heading isn't trustworthy (no mag and
+    //          GPS course not yet acquired) the direction is meaningless, so we show '?' instead
+    //          (position stays valid — it's GPS-derived, not heading-derived).
+    //
+    // Drawn the Betaflight way: one row per pass into the shared element buffer (a single
+    // displayWrite each), using elemOffsetY for the second row and rendered=false to be called
+    // again for it. This avoids the per-character writes that were flooding the MSP DisplayPort
+    // link and starving other OSD elements. A full-width blank row when idle clears old content.
+    static enum { PHASE_ROW1, PHASE_ROW2 } phase = PHASE_ROW1;
 
     const uint8_t barWidth = 21;             // odd -> exact centre column
     const uint8_t centre = barWidth / 2;
 
     adsbVehicle_t *vehicle = findVehicleThreat(NULL);
+    const bool show = (vehicle != NULL);
 
-    if (!vehicle) {
-        if (wasShown) {
-            // One-off clear of both rows when the threat disappears.
-            for (uint8_t i = 0; i < barWidth; i++) {
-                element->buff[i] = ' ';
-                osdDisplayWriteChar(element, element->elemPosX + i, element->elemPosY + 1, DISPLAYPORT_SEVERITY_NORMAL, ' ');
-            }
-            element->buff[barWidth] = '\0';
-            wasShown = false;
-        } else {
-            element->buff[0] = '\0';         // idle: draw nothing, don't clobber neighbouring elements
-        }
-        return;
+    char *buff = element->buff;
+    for (uint8_t i = 0; i < barWidth; i++) {
+        buff[i] = ' ';                       // full-width blank row (clears any previous content)
     }
-    wasShown = true;
+    buff[barWidth] = '\0';
 
     int coneHalfDeg = (adsbConfig()->detectionCone + 100) / 200;   // half-cone, degrees, rounded
     if (coneHalfDeg < 1) {
         coneHalfDeg = 1;
     }
 
-    // Row 1: "-X" ... "0" ... "+X" over a dashed scale.
-    char *buff = element->buff;
-    for (uint8_t i = 0; i < barWidth; i++) {
-        buff[i] = '-';
-    }
-    buff[barWidth] = '\0';
-    buff[centre] = '0';
-    char num[8];
-    int len = tfp_sprintf(num, "-%d", coneHalfDeg);
-    for (int i = 0; i < len && i < centre; i++) {
-        buff[i] = num[i];
-    }
-    len = tfp_sprintf(num, "+%d", coneHalfDeg);
-    for (int i = 0; i < len; i++) {
-        const int col = barWidth - len + i;
-        if (col > centre) {
-            buff[col] = num[i];
+    if (phase == PHASE_ROW1) {
+        element->elemOffsetY = 0;
+        if (show) {
+            // scale: "-X" ... "0" ... "+X" over a dashed line
+            for (uint8_t i = 0; i < barWidth; i++) {
+                buff[i] = '-';
+            }
+            buff[centre] = '0';
+            char num[8];
+            int len = tfp_sprintf(num, "-%d", coneHalfDeg);
+            for (int i = 0; i < len && i < centre; i++) {
+                buff[i] = num[i];
+            }
+            len = tfp_sprintf(num, "+%d", coneHalfDeg);
+            for (int i = 0; i < len; i++) {
+                const int col = barWidth - len + i;
+                if (col > centre) {
+                    buff[col] = num[i];
+                }
+            }
         }
-    }
+        element->rendered = false;           // come back for row 2 (drawn at elemOffsetY = 1)
+        phase = PHASE_ROW2;
+    } else {
+        element->elemOffsetY = 1;
+        if (show) {
+            // threat's position in the cone: heading error vs. the reciprocal bearing (as in findVehicleThreat)
+            int32_t headingError = (int32_t)vehicle->vehicleValues.heading - (vehicle->calculatedVehicleValues.dir + 18000);
+            headingError = ((headingError % 36000) + 36000) % 36000;
+            if (headingError > 18000) {
+                headingError -= 36000;
+            }
+            const int errDeg = constrain((int)(headingError / 100), -coneHalfDeg, coneHalfDeg);
+            const uint8_t arrowCol = constrain(centre + (errDeg * centre) / coneHalfDeg, 0, barWidth - 1);
 
-    // Threat's position in the cone: heading error vs. the reciprocal bearing (as in findVehicleThreat).
-    int32_t headingError = (int32_t)vehicle->vehicleValues.heading - (vehicle->calculatedVehicleValues.dir + 18000);
-    headingError = ((headingError % 36000) + 36000) % 36000;
-    if (headingError > 18000) {
-        headingError -= 36000;
-    }
-    const int errDeg = constrain((int)(headingError / 100), -coneHalfDeg, coneHalfDeg);
-    const uint8_t arrowCol = constrain(centre + (errDeg * centre) / coneHalfDeg, 0, barWidth - 1);
-
-    // Arrow direction = angle between our motion vector and the aircraft's.
-    // screenAngle: 0 = up (opposed / head-on), 180 = down (same course), 90 = crossing right.
-    int screenAngle = 180 - (vehicle->vehicleValues.heading / 100) + (attitude.values.yaw / 10);
-    screenAngle = ((screenAngle % 360) + 360) % 360;
-    const uint8_t arrow = osdGetDirectionSymbolFromHeading(screenAngle);
-
-    // Row 2: arrow at its column, blanks elsewhere (also clears any previous arrow position).
-    for (uint8_t i = 0; i < barWidth; i++) {
-        osdDisplayWriteChar(element, element->elemPosX + i, element->elemPosY + 1, DISPLAYPORT_SEVERITY_NORMAL, (i == arrowCol) ? arrow : ' ');
+            if (imuIsHeadingValid()) {
+                // screenAngle: 0 = up (opposed / head-on), 180 = down (same course), 90 = crossing right
+                int screenAngle = 180 - (vehicle->vehicleValues.heading / 100) + (attitude.values.yaw / 10);
+                screenAngle = ((screenAngle % 360) + 360) % 360;
+                buff[arrowCol] = osdGetDirectionSymbolFromHeading(screenAngle);
+            } else {
+                buff[arrowCol] = '?';        // heading not trustworthy -> show position only, direction unknown
+            }
+        }
+        phase = PHASE_ROW1;
     }
 }
 #endif
