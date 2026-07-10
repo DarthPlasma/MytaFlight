@@ -165,7 +165,7 @@ const GLYPHS = { [GT]:GLYPH_SVG.thermo, [GV]:GLYPH_SVG.volt, [GB]:GLYPH_SVG.batt
 
 const SAMPLES = {
   osd_vbat_pos: GB+"16.8"+GV, osd_sag_comp_batt_pos:"16.8"+GV, osd_avg_cell_voltage_pos: GB+"4.20"+GV,
-  osd_battery_impedance_pos:"  18mR", osd_battery_temp_pos:"B"+GT+" 45"+GD, osd_rssi_pos:"RSS99", osd_link_quality_pos:"LQ:99",
+  osd_battery_impedance_pos:"0.014R", osd_battery_temp_pos:"B"+GT+" 45"+GD, osd_rssi_pos:"RSS99", osd_link_quality_pos:"LQ:99",
   osd_craft_name_pos:"CRAFTNAME", osd_current_pos:"12.4"+GA, osd_mah_drawn_pos:"1234mAh",
   osd_power_pos:"210W", osd_altitude_pos: GL+"12.3m", osd_gps_speed_pos:"45",
   osd_gps_sats_pos: GS+"12", osd_gps_lat_pos:"47.1234", osd_gps_lon_pos:" 9.5678",
@@ -174,7 +174,7 @@ const SAMPLES = {
   osd_core_temp_pos:"C"+GT+" 45"+GD, osd_esc_tmp_pos:"E"+GT+" 45"+GD, osd_g_force_pos:"1.2G",
   osd_pit_ang_pos:"P-4.5°", osd_rol_ang_pos:"R 2.3°",
   osd_adsb_warning_pos: GR+"2.3km +150", osd_adsb_info_pos: GR+"LARGE 250kmh PEGASO1", osd_adsb_status_pos:"A5/2",
-  osd_adsb_critical_warning_pos:"AIRCRAFT APPROACHING 45s",
+  osd_adsb_critical_warning_pos:"AIRCRAFT APPROACHING 45S",
   osd_compass_bar_pos:"──N─┃─E──", osd_flymode_pos:"ANGL", osd_throttle_pos:"35%", osd_warnings_pos:"LAND NOW",
 };
 
@@ -387,7 +387,7 @@ function buildPreview(){
     ['Battery temp',            'B'+T+' 25'+D, false],
     ['— alarm (out of range)',  'B'+T+' 65'+D, true],
     ['— sensor absent',         'B'+T+'---'+D, false],
-    ['Battery impedance',       '18mR', false],
+    ['Battery impedance',       '0.014R', false],
     ['Sag-comp voltage',        '16.8'+V, false],
   ];
   $('preview').innerHTML = rows.map(([lbl,val,blink])=>

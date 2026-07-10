@@ -38,7 +38,7 @@ Estimates the pack's **internal resistance in milliohms** and a **sag-compensate
 | `battery_impedance_lpf_period` | `60` | PT1 smoothing period (6.0 s) |
 | `battery_impedance_stable_count` | `10` | stable samples required before a reading is trusted |
 
-- **OSD:** `OSD_BATTERY_IMPEDANCE` shows `<n>mR` (no ohm glyph in the BF font); `OSD_SAG_COMP_BATT_VOLTAGE` shows the no-load voltage. Place with `osd_battery_impedance_pos` / `osd_sag_comp_batt_pos`.
+- **OSD:** `OSD_BATTERY_IMPEDANCE` shows the resistance in ohms as `<x>.<mmm>R` (e.g. `0.014R` = 14 mΩ; `R` stands in for the missing ohm glyph); `OSD_SAG_COMP_BATT_VOLTAGE` shows the no-load voltage. Place with `osd_battery_impedance_pos` / `osd_sag_comp_batt_pos`.
 - **Note:** impedance only converges **in flight** (it needs real throttle steps) — it won't settle on the bench. It's additive to BF's existing voltage-only sag compensation, which is left untouched.
 
 ---
@@ -78,7 +78,7 @@ An aircraft becomes a **critical threat** when it is **(a)** heading at you — 
 - `OSD_ADSB_STATUS` — `A<detected>/<in-range>`: **detected** = everything received over MAVLink (any distance, even with no GPS fix); **in-range** = only those within the distance/height limits
 
 **Dedicated safety elements** — shown only during a critical threat, and independent of BF's generic warnings so they can't be pre-empted or overwrite neighbouring elements:
-- `OSD_ADSB_CRITICAL_WARNING` — a steady `AIRCRAFT APPROACHING <s>` (seconds to arrival)
+- `OSD_ADSB_CRITICAL_WARNING` — a steady `AIRCRAFT APPROACHING <n>S` (seconds to arrival)
 - `OSD_ADSB_CONE` — a two-row **collision cone**:
 
   ```
