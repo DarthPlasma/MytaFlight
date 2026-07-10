@@ -78,7 +78,7 @@ Feature branches are independent (each from master) for clean upstream rebasing.
 ### A — Battery internal impedance  (branch `feature/battery-impedance`, gate `USE_BATTERY_IMPEDANCE`, **default ON**)
 Estimates battery internal resistance (mΩ) via opportunistic ΔV/ΔI (iNAV method — passive, no current-interrupt), plus a current-aware sag-compensated voltage. Runs from the 50 Hz battery-current task.
 - Files: `sensors/battery.{c,h}` (est. logic, getters, config), `osd/osd.h` + `osd/osd_elements.c` (2 OSD elements), `cli/settings.c`, `target/common_pre.h` (the flag).
-- CLI: `battery_impedance_i_threshold` (200 = 2A), `battery_impedance_v_threshold` (4 = 40mV), `battery_impedance_lpf_period` (12 = 1.2s), `battery_impedance_stable_count` (10).
+- CLI: `battery_impedance_i_threshold` (500 = 5A), `battery_impedance_v_threshold` (10 = 0.10V), `battery_impedance_lpf_period` (60 = 6.0s), `battery_impedance_stable_count` (10). Samples pass through a 5-wide **median** filter (outlier rejection) then the PT1 — thresholds/period raised well above iNAV's for a steadier reading.
 - OSD: `OSD_BATTERY_IMPEDANCE` ("<n>mR", no ohm glyph in BF font), `OSD_SAG_COMP_BATT_VOLTAGE`. CLI pos: `osd_battery_impedance_pos`, `osd_sag_comp_batt_pos`.
 - Note: BF already has a *voltage-only LPF* sag comp for the mixer — we did NOT touch it; impedance is additive. Won't converge on the bench (needs in-flight throttle steps).
 

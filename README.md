@@ -1,3 +1,140 @@
+# MyTAflight
+
+MyTAflight is a **personal fork of [Betaflight](https://github.com/betaflight/betaflight)** that adds four traffic-safety / telemetry features (ported or adapted from iNAV) plus browser-based tooling. Every addition is **feature-gated and additive**: build with the custom flags off and you get stock Betaflight behaviour.
+
+- **Base:** Betaflight `2026.6.0-alpha` · **Licence:** GPLv3
+- **Flash this branch:** `integration` merges all four features + the tools.
+- **Developer deep-dive:** see **[MYTAFLIGHT.md](MYTAFLIGHT.md)** for file-by-file changes, design notes and gotchas.
+
+## What's added
+
+|   | Feature | Build flag | Default | Requires |
+|---|---------|-----------|---------|----------|
+| **A** | Battery internal impedance + sag-compensated voltage | `USE_BATTERY_IMPEDANCE` | **on** | current meter |
+| **B** | I²C temperature sensor (LM75) on the OSD | `USE_TEMPERATURE_SENSOR` | opt-in | LM75 sensor |
+| **C** | ADS-B traffic awareness on the OSD | `USE_ADSB` | opt-in | GPS + MAVLink ADS-B RX |
+| **D** | Vector "cruise" position hold | *(runtime)* `pos_hold_navmode` | classic `ANGLE` | GPS |
+
+Build a firmware with the opt-in features:
+
+```bash
+git checkout integration
+make KAKUTEH7 OPTIONS="USE_TEMPERATURE_SENSOR USE_ADSB"                   # H7 boards
+make TMOTORVELOXF7V2 OPTIONS="USE_TEMPERATURE_SENSOR USE_ADSB USE_GPS"    # add USE_GPS where the config lacks it
+```
+
+Impedance (A) and cruise pos-hold (D) are always compiled in and controlled at runtime. Prefer a UI? Use the point-and-click [build tool](#tools).
+
+---
+
+## A — Battery internal impedance
+
+Estimates the pack's **internal resistance in milliohms** and a **sag-compensated (no-load) voltage** using iNAV's passive ΔV/ΔI method (no current-interrupt). Whenever the current changes by a meaningful step it derives R = ΔV/ΔI from opportunistic samples, rejects outliers with a **5-sample median** filter, then smooths with a slow **PT1**.
+
+| CLI setting | Default | Meaning |
+|-------------|---------|---------|
+| `battery_impedance_i_threshold` | `500` | min current step to take a sample (5.00 A) |
+| `battery_impedance_v_threshold` | `10` | min voltage drop to take a sample (0.10 V) |
+| `battery_impedance_lpf_period` | `60` | PT1 smoothing period (6.0 s) |
+| `battery_impedance_stable_count` | `10` | stable samples required before a reading is trusted |
+
+- **OSD:** `OSD_BATTERY_IMPEDANCE` shows `<n>mR` (no ohm glyph in the BF font); `OSD_SAG_COMP_BATT_VOLTAGE` shows the no-load voltage. Place with `osd_battery_impedance_pos` / `osd_sag_comp_batt_pos`.
+- **Note:** impedance only converges **in flight** (it needs real throttle steps) — it won't settle on the bench. It's additive to BF's existing voltage-only sag compensation, which is left untouched.
+
+---
+
+## B — I²C temperature sensor (LM75)
+
+Reads an external **LM75 I²C temperature sensor** (e.g. taped to the battery) at 2 Hz and puts it on the OSD — useful for watching pack temperature on long-range / heavy builds. Enable with `USE_TEMPERATURE_SENSOR`.
+
+- **CLI:** `temp_sensor_i2c_device`, `temp_sensor_i2c_address` (LM75 default `0x48` = 72), `temp_sensor_alarm_min` (0 °C), `temp_sensor_alarm_max` (60 °C).
+- **OSD:** `OSD_BATTERY_TEMPERATURE` renders `B🌡<t>C` (dashes when the sensor is absent) and **blinks** when the temperature leaves the alarm window. Place with `osd_battery_temp_pos`.
+
+---
+
+## C — ADS-B traffic awareness ✈️
+
+The headline feature. With a **MAVLink ADS-B receiver** (e.g. uAvionix pingRX, Aerobit TT-SC1) on a spare UART in MAVLink mode, the FC ingests `ADSB_VEHICLE` messages and turns nearby crewed-aircraft traffic into **OSD situational awareness and collision alerts**. Requires `USE_ADSB` and a GPS fix (for range/bearing). Up to 5 aircraft are tracked; distance/bearing come from your GPS position, vertical separation from your fused altitude.
+
+### Configuration
+
+| CLI setting | Default | Meaning |
+|-------------|---------|---------|
+| `adsb_max_dist_horiz` | `50000` | max horizontal distance to **display** (m) |
+| `adsb_max_dist_vert` | `2000` | max height **above** you to display (m); traffic below you is always shown |
+| `adsb_detection_cone` | `2000` | approach cone for the collision alert (centidegrees; 2000 = ±10°) |
+| `adsb_aircraft_toa` | `60` | time-to-arrival threshold for the alert (s) |
+
+### Threat logic
+
+An aircraft becomes a **critical threat** when it is **(a)** heading at you — its course is within ±½·cone of the reciprocal bearing, **(b)** closing within `adsb_aircraft_toa` seconds (distance ÷ ground speed), and **(c)** inside the display envelope. If several qualify, the one with the **lowest time-to-arrival** (most imminent) is shown.
+
+### OSD elements
+
+**Informational (nearest traffic):**
+- `OSD_ADSB_WARNING` — arrow to the traffic + distance + altitude delta
+- `OSD_ADSB_INFO` — movement arrow, aircraft class, speed, callsign
+- `OSD_ADSB_STATUS` — `A<detected>/<in-range>`: **detected** = everything received over MAVLink (any distance, even with no GPS fix); **in-range** = only those within the distance/height limits
+
+**Dedicated safety elements** — shown only during a critical threat, and independent of BF's generic warnings so they can't be pre-empted or overwrite neighbouring elements:
+- `OSD_ADSB_CRITICAL_WARNING` — a steady `AIRCRAFT APPROACHING <s>` (seconds to arrival)
+- `OSD_ADSB_CONE` — a two-row **collision cone**:
+
+  ```
+  -10-------0-------+10     scale spanning ±(cone/2)°
+            ▲               threat position in the cone + relative-motion arrow
+  ```
+
+  The arrow's **column** is where the threat sits in the cone (centre = dead-on collision course). Its **direction** is the angle between your motion vector and the aircraft's: **▲ up** = head-on (opposed vectors), **▼ down** = same course, **◄ / ►** = crossing traffic. If your own heading isn't trustworthy yet (no compass and GPS course not acquired) the arrow becomes **`?`** — the position is still valid (it's GPS-derived), only the direction is unknown.
+
+Place every element with its `osd_..._pos` CLI key, or visually with the [OSD layout tool](#tools). New OSD elements aren't known to the stock Configurator, so they must be positioned via CLI / the tool.
+
+### Bench testing without a receiver
+
+`mytaflight-tools/adsb-injector/` is an **ESP32 sketch** that emulates a TT-SC1: it raises a Wi-Fi access point (`10.0.0.1`) hosting a web page where you set lat/long/speed/heading/altitude/type/callsign for up to 5 aircraft, optionally make them **move**, and it streams valid MAVLink `ADSB_VEHICLE` frames out its UART into the FC — so you can exercise the whole OSD/alert chain on the bench.
+
+---
+
+## D — Vector "cruise" position hold
+
+Stock Betaflight position hold hands control back to **raw angle mode** on stick input, which drifts in wind and gives a false sense of control. This adds an iNAV-style option where, inside POS HOLD, stick deflection commands a **wind-compensated velocity** instead of an angle; releasing the sticks brakes smoothly to a hold.
+
+- **Runtime setting:** `pos_hold_navmode` = `ANGLE` (default, unchanged classic behaviour) or `CRUISE`. Yaw stays pilot-controlled; cruise velocity magnitude uses `ap_max_velocity` (shared with waypoint nav).
+- **Status:** merged and **field-validated** on a DAKEFPV H743 (correct stick signs, brake-to-hold, no crosswind drift). Only PID tuning (notably altitude) remains. The default stays `ANGLE`, so flashing changes nothing until you select `CRUISE`.
+
+---
+
+## Tools
+
+Browser-based helpers in `mytaflight-tools/`:
+
+- **`osd-layout.html`** — open in a browser: paste a CLI `diff`/`dump`, drag the OSD elements (including the new ones) onto a video-system-aware grid (Analog, HDZero, DJI O3/O4, WTFOS, Walksnail, custom), then copy the `set osd_*_pos` lines back. WYSIWYG, with background overlay and 3 OSD profiles.
+- **`build-tool.py`** — `python3 mytaflight-tools/build-tool.py` → <http://localhost:8792>. Pick a target and features from dropdowns/checkboxes (Full vs Slim cloud build), it runs `make`, reports flash usage, and serves the resulting `.hex`.
+- **`adsb-injector/`** — the ESP32 ADS-B traffic simulator described above.
+
+---
+
+## Branches
+
+| Branch | Contents |
+|--------|----------|
+| `master` | pristine upstream Betaflight base |
+| `feature/battery-impedance` | Feature A |
+| `feature/temp-sensors` | Feature B (+ tools, historically) |
+| `feature/adsb` | Feature C |
+| `feature/poshold-vector` | Feature D |
+| **`integration`** | **all four features + tools — flash this one** |
+
+Feature branches are independent (each off `master`) for clean rebasing onto upstream; `integration` is where they come together.
+
+> ⚠️ Adding OSD elements bumps the OSD parameter-group version, so flashing a build that changes the OSD element set **resets OSD element positions to defaults**. Save your CLI `diff` first and paste it back afterwards (or re-place with the OSD tool).
+
+---
+
+Below is the upstream Betaflight README.
+
+---
+
 ![Betaflight](https://raw.githubusercontent.com/betaflight/.github/main/profile/images/bf_logo.svg#gh-light-mode-only)
 ![Betaflight](https://raw.githubusercontent.com/betaflight/.github/main/profile/images/bf_logo_dark.svg#gh-dark-mode-only)
 
