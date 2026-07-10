@@ -2096,10 +2096,14 @@ static void osdElementAdsbCriticalWarning(osdElementParms_t *element)
     // (cone + ToA + vertical). Decoupled from the generic OSD_WARNINGS element so it can't be
     // pre-empted by higher-priority warnings and can be placed clear of other elements. Steady
     // (not blinking): blinking was getting dropped/hidden on MSP DisplayPort, and steady reads better.
+    //
+    // Severity stays NORMAL on purpose. On MSP DisplayPort (DJI/WTFOS) the severity picks a FONT
+    // PAGE via displayPortProfile.fontSelection[severity] (default {0,1,2,3}); SEVERITY_CRITICAL
+    // selects font page 3, which on most goggles has no ASCII glyphs -> the text is written but
+    // rendered blank (invisible). NORMAL uses the base font, so the warning actually shows.
     uint32_t toaSeconds;
     if (findVehicleThreat(&toaSeconds)) {
         tfp_sprintf(element->buff, "AIRCRAFT APPROACHING %us", toaSeconds);
-        element->attr = DISPLAYPORT_SEVERITY_CRITICAL;
     } else {
         element->buff[0] = '\0';   // no threat: render empty (clears the element's cells)
     }
