@@ -2115,28 +2115,27 @@ static void osdElementAdsbCone(osdElementParms_t *element)
 {
     // Two-row "collision cone", shown only while an aircraft is a critical threat.
     //   Row 1: numeric scale spanning the detection cone, -X ... 0 ... +X, X = round(cone/2) deg.
-    //   Row 2: an arrow whose COLUMN is the threat's position in the cone (its heading error vs.
-    //          the head-on collision course, 0 = dead centre) and whose DIRECTION is the angle
-    //          between our motion vector and the aircraft's (opposed/head-on -> up, same course ->
-    //          down, crossing -> to that side). If our own heading isn't trustworthy (no mag and
-    //          GPS course not yet acquired) the direction is meaningless, so we show '?' instead
-    //          (position stays valid — it's GPS-derived, not heading-derived).
+    //   Row 2 carries up to two markers:
+    //     * THREAT arrow  -- column = the aircraft's position in the cone (heading error vs. the
+    //       head-on course, 0 = dead centre); glyph = the angle between our motion vector and the
+    //       aircraft's (head-on -> up, same course -> down, crossing -> to that side), or '?' if our
+    //       heading isn't trustworthy.
+    //     * OUR predicted-position crosshair -- where we will be at ToA relative to where the
+    //       aircraft will be, if both hold course (see adsbThreatMissAngleDeg). Inside the cone it
+    //       is a crosshair; if we are projected to leave the cone it becomes an outward arrow at
+    //       that edge. Skipped when our heading can't be trusted (can't predict), or when it would
+    //       land on the threat arrow's column (drawn together -> just show the arrow).
     //
-    // Drawn one row per pass into the shared element buffer (a single displayWrite each), using
-    // elemOffsetX/Y and rendered=false to come back for row 2 -- the ESC-RPM idiom. IMPORTANT: it
-    // only ever writes its OWN cells (the scale, and the single arrow). The OSD resets the whole
-    // foreground every cycle, so an element must NOT write spaces to "clear" itself -- doing that
-    // blanks whatever element shares its footprint, every frame (that is what was making
-    // neighbouring elements flicker / disappear, and could erase the critical-warning text).
-    static enum { PHASE_ROW1, PHASE_ROW2 } phase = PHASE_ROW1;
-
+    // Row 1 goes through the element buffer (one displayWrite); the row-2 markers are written
+    // directly (content only -- never spaces). The OSD resets the whole foreground each cycle, so an
+    // element must only ever write its OWN cells: writing spaces would blank overlapping elements.
     const uint8_t barWidth = 21;             // odd -> exact centre column
     const uint8_t centre = barWidth / 2;
 
-    adsbVehicle_t *vehicle = findVehicleThreat(NULL);
+    uint32_t toaSeconds = 0;
+    adsbVehicle_t *vehicle = findVehicleThreat(&toaSeconds);
     if (!vehicle) {
         element->buff[0] = '\0';             // no threat: draw nothing, don't touch our footprint
-        phase = PHASE_ROW1;
         return;
     }
 
@@ -2145,52 +2144,67 @@ static void osdElementAdsbCone(osdElementParms_t *element)
         coneHalfDeg = 1;
     }
 
+    // --- Row 1: the "-X ... 0 ... +X" scale (element buffer, drawn at the anchor). ---
     char *buff = element->buff;
+    for (uint8_t i = 0; i < barWidth; i++) {
+        buff[i] = '-';
+    }
+    buff[barWidth] = '\0';
+    buff[centre] = '0';
+    char num[8];
+    int len = tfp_sprintf(num, "-%d", coneHalfDeg);
+    for (int i = 0; i < len && i < centre; i++) {
+        buff[i] = num[i];
+    }
+    len = tfp_sprintf(num, "+%d", coneHalfDeg);
+    for (int i = 0; i < len; i++) {
+        const int col = barWidth - len + i;
+        if (col > centre) {
+            buff[col] = num[i];
+        }
+    }
 
-    if (phase == PHASE_ROW1) {
-        // Row 1: the "-X ... 0 ... +X" scale.
-        for (uint8_t i = 0; i < barWidth; i++) {
-            buff[i] = '-';
-        }
-        buff[barWidth] = '\0';
-        buff[centre] = '0';
-        char num[8];
-        int len = tfp_sprintf(num, "-%d", coneHalfDeg);
-        for (int i = 0; i < len && i < centre; i++) {
-            buff[i] = num[i];
-        }
-        len = tfp_sprintf(num, "+%d", coneHalfDeg);
-        for (int i = 0; i < len; i++) {
-            const int col = barWidth - len + i;
-            if (col > centre) {
-                buff[col] = num[i];
-            }
-        }
-        element->elemOffsetY = 0;
-        element->rendered = false;           // come back for row 2
-        phase = PHASE_ROW2;
+    // --- Row 2: the threat arrow, plus our predicted-position marker. ---
+    const uint8_t row2Y = element->elemPosY + 1;
+    const bool headingValid = imuIsHeadingValid();
+
+    // Threat arrow: its position in the cone + our-motion-vs-its-motion direction (or '?').
+    int32_t headingError = (int32_t)vehicle->vehicleValues.heading - (vehicle->calculatedVehicleValues.dir + 18000);
+    headingError = ((headingError % 36000) + 36000) % 36000;
+    if (headingError > 18000) {
+        headingError -= 36000;
+    }
+    const int acErrDeg = constrain((int)(headingError / 100), -coneHalfDeg, coneHalfDeg);
+    const uint8_t acCol = constrain(centre + (acErrDeg * centre) / coneHalfDeg, 0, barWidth - 1);
+    char acGlyph;
+    if (headingValid) {
+        int screenAngle = 180 - (vehicle->vehicleValues.heading / 100) + (attitude.values.yaw / 10);
+        screenAngle = ((screenAngle % 360) + 360) % 360;
+        acGlyph = osdGetDirectionSymbolFromHeading(screenAngle);
     } else {
-        // Row 2: just the arrow at its column (the rest of the row is cleared by the cycle reset).
-        int32_t headingError = (int32_t)vehicle->vehicleValues.heading - (vehicle->calculatedVehicleValues.dir + 18000);
-        headingError = ((headingError % 36000) + 36000) % 36000;
-        if (headingError > 18000) {
-            headingError -= 36000;
-        }
-        const int errDeg = constrain((int)(headingError / 100), -coneHalfDeg, coneHalfDeg);
-        const uint8_t arrowCol = constrain(centre + (errDeg * centre) / coneHalfDeg, 0, barWidth - 1);
+        acGlyph = '?';
+    }
 
-        if (imuIsHeadingValid()) {
-            // screenAngle: 0 = up (opposed / head-on), 180 = down (same course), 90 = crossing right
-            int screenAngle = 180 - (vehicle->vehicleValues.heading / 100) + (attitude.values.yaw / 10);
-            screenAngle = ((screenAngle % 360) + 360) % 360;
-            buff[0] = osdGetDirectionSymbolFromHeading(screenAngle);
+    // Our predicted-position marker (only if our heading is usable -- otherwise we can't project).
+    uint8_t missCol = 0;
+    char missGlyph = 0;
+    int missDeg;
+    if (headingValid && adsbThreatMissAngleDeg(vehicle, toaSeconds, &missDeg)) {
+        if (missDeg > coneHalfDeg) {
+            missCol = barWidth - 1;
+            missGlyph = SYM_ARROW_EAST;      // projected to leave the cone on the right
+        } else if (missDeg < -coneHalfDeg) {
+            missCol = 0;
+            missGlyph = SYM_ARROW_WEST;      // projected to leave the cone on the left
         } else {
-            buff[0] = '?';                   // heading not trustworthy -> position only, direction unknown
+            missCol = constrain(centre + (missDeg * centre) / coneHalfDeg, 0, barWidth - 1);
+            missGlyph = SYM_AH_CENTER;       // predicted position inside the cone (crosshair marker)
         }
-        buff[1] = '\0';
-        element->elemOffsetX = arrowCol;
-        element->elemOffsetY = 1;
-        phase = PHASE_ROW1;
+    }
+
+    osdDisplayWriteChar(element, element->elemPosX + acCol, row2Y, DISPLAYPORT_SEVERITY_NORMAL, acGlyph);
+    if (missGlyph && missCol != acCol) {     // coincident with the threat arrow -> show the arrow only
+        osdDisplayWriteChar(element, element->elemPosX + missCol, row2Y, DISPLAYPORT_SEVERITY_NORMAL, missGlyph);
     }
 }
 #endif
