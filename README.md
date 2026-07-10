@@ -54,7 +54,7 @@ Reads an external **LM75 I²C temperature sensor** (e.g. taped to the battery) a
 
 ## C — ADS-B traffic awareness ✈️
 
-The headline feature. With a **MAVLink ADS-B receiver** (e.g. uAvionix pingRX, Aerobit TT-SC1) on a spare UART in MAVLink mode, the FC ingests `ADSB_VEHICLE` messages and turns nearby crewed-aircraft traffic into **OSD situational awareness and collision alerts**. Requires `USE_ADSB` and a GPS fix (for range/bearing). Up to 5 aircraft are tracked; distance/bearing come from your GPS position, vertical separation from your fused altitude.
+The headline feature. With a **MAVLink ADS-B receiver** (e.g. uAvionix pingRX, Aerobit TT-SC1) on a spare UART in MAVLink mode, the FC ingests `ADSB_VEHICLE` messages and turns nearby crewed-aircraft traffic into **OSD situational awareness and collision alerts**. Requires `USE_ADSB` and a GPS fix (for range/bearing). Up to `adsb_max_vehicle` aircraft (5–12, default 5) are tracked at once; distance/bearing come from your GPS position, vertical separation from your fused altitude.
 
 ### Configuration
 
@@ -64,6 +64,7 @@ The headline feature. With a **MAVLink ADS-B receiver** (e.g. uAvionix pingRX, A
 | `adsb_max_dist_vert` | `2000` | max height **above** you to display (m); traffic below you is always shown |
 | `adsb_detection_cone` | `2000` | approach cone for the collision alert (centidegrees; 2000 = ±10°) |
 | `adsb_aircraft_toa` | `60` | time-to-arrival threshold for the alert (s) |
+| `adsb_max_vehicle` | `5` | aircraft tracked simultaneously (5–12) |
 
 ### Threat logic
 
