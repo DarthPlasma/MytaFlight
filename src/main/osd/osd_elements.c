@@ -2017,73 +2017,74 @@ static void osdElementAdsbCone(osdElementParms_t *element)
     //          GPS course not yet acquired) the direction is meaningless, so we show '?' instead
     //          (position stays valid — it's GPS-derived, not heading-derived).
     //
-    // Drawn the Betaflight way: one row per pass into the shared element buffer (a single
-    // displayWrite each), using elemOffsetY for the second row and rendered=false to be called
-    // again for it. This avoids the per-character writes that were flooding the MSP DisplayPort
-    // link and starving other OSD elements. A full-width blank row when idle clears old content.
+    // Drawn one row per pass into the shared element buffer (a single displayWrite each), using
+    // elemOffsetX/Y and rendered=false to come back for row 2 -- the ESC-RPM idiom. IMPORTANT: it
+    // only ever writes its OWN cells (the scale, and the single arrow). The OSD resets the whole
+    // foreground every cycle, so an element must NOT write spaces to "clear" itself -- doing that
+    // blanks whatever element shares its footprint, every frame (that is what was making
+    // neighbouring elements flicker / disappear, and could erase the critical-warning text).
     static enum { PHASE_ROW1, PHASE_ROW2 } phase = PHASE_ROW1;
 
     const uint8_t barWidth = 21;             // odd -> exact centre column
     const uint8_t centre = barWidth / 2;
 
     adsbVehicle_t *vehicle = findVehicleThreat(NULL);
-    const bool show = (vehicle != NULL);
-
-    char *buff = element->buff;
-    for (uint8_t i = 0; i < barWidth; i++) {
-        buff[i] = ' ';                       // full-width blank row (clears any previous content)
+    if (!vehicle) {
+        element->buff[0] = '\0';             // no threat: draw nothing, don't touch our footprint
+        phase = PHASE_ROW1;
+        return;
     }
-    buff[barWidth] = '\0';
 
     int coneHalfDeg = (adsbConfig()->detectionCone + 100) / 200;   // half-cone, degrees, rounded
     if (coneHalfDeg < 1) {
         coneHalfDeg = 1;
     }
 
+    char *buff = element->buff;
+
     if (phase == PHASE_ROW1) {
-        element->elemOffsetY = 0;
-        if (show) {
-            // scale: "-X" ... "0" ... "+X" over a dashed line
-            for (uint8_t i = 0; i < barWidth; i++) {
-                buff[i] = '-';
-            }
-            buff[centre] = '0';
-            char num[8];
-            int len = tfp_sprintf(num, "-%d", coneHalfDeg);
-            for (int i = 0; i < len && i < centre; i++) {
-                buff[i] = num[i];
-            }
-            len = tfp_sprintf(num, "+%d", coneHalfDeg);
-            for (int i = 0; i < len; i++) {
-                const int col = barWidth - len + i;
-                if (col > centre) {
-                    buff[col] = num[i];
-                }
+        // Row 1: the "-X ... 0 ... +X" scale.
+        for (uint8_t i = 0; i < barWidth; i++) {
+            buff[i] = '-';
+        }
+        buff[barWidth] = '\0';
+        buff[centre] = '0';
+        char num[8];
+        int len = tfp_sprintf(num, "-%d", coneHalfDeg);
+        for (int i = 0; i < len && i < centre; i++) {
+            buff[i] = num[i];
+        }
+        len = tfp_sprintf(num, "+%d", coneHalfDeg);
+        for (int i = 0; i < len; i++) {
+            const int col = barWidth - len + i;
+            if (col > centre) {
+                buff[col] = num[i];
             }
         }
-        element->rendered = false;           // come back for row 2 (drawn at elemOffsetY = 1)
+        element->elemOffsetY = 0;
+        element->rendered = false;           // come back for row 2
         phase = PHASE_ROW2;
     } else {
-        element->elemOffsetY = 1;
-        if (show) {
-            // threat's position in the cone: heading error vs. the reciprocal bearing (as in findVehicleThreat)
-            int32_t headingError = (int32_t)vehicle->vehicleValues.heading - (vehicle->calculatedVehicleValues.dir + 18000);
-            headingError = ((headingError % 36000) + 36000) % 36000;
-            if (headingError > 18000) {
-                headingError -= 36000;
-            }
-            const int errDeg = constrain((int)(headingError / 100), -coneHalfDeg, coneHalfDeg);
-            const uint8_t arrowCol = constrain(centre + (errDeg * centre) / coneHalfDeg, 0, barWidth - 1);
-
-            if (imuIsHeadingValid()) {
-                // screenAngle: 0 = up (opposed / head-on), 180 = down (same course), 90 = crossing right
-                int screenAngle = 180 - (vehicle->vehicleValues.heading / 100) + (attitude.values.yaw / 10);
-                screenAngle = ((screenAngle % 360) + 360) % 360;
-                buff[arrowCol] = osdGetDirectionSymbolFromHeading(screenAngle);
-            } else {
-                buff[arrowCol] = '?';        // heading not trustworthy -> show position only, direction unknown
-            }
+        // Row 2: just the arrow at its column (the rest of the row is cleared by the cycle reset).
+        int32_t headingError = (int32_t)vehicle->vehicleValues.heading - (vehicle->calculatedVehicleValues.dir + 18000);
+        headingError = ((headingError % 36000) + 36000) % 36000;
+        if (headingError > 18000) {
+            headingError -= 36000;
         }
+        const int errDeg = constrain((int)(headingError / 100), -coneHalfDeg, coneHalfDeg);
+        const uint8_t arrowCol = constrain(centre + (errDeg * centre) / coneHalfDeg, 0, barWidth - 1);
+
+        if (imuIsHeadingValid()) {
+            // screenAngle: 0 = up (opposed / head-on), 180 = down (same course), 90 = crossing right
+            int screenAngle = 180 - (vehicle->vehicleValues.heading / 100) + (attitude.values.yaw / 10);
+            screenAngle = ((screenAngle % 360) + 360) % 360;
+            buff[0] = osdGetDirectionSymbolFromHeading(screenAngle);
+        } else {
+            buff[0] = '?';                   // heading not trustworthy -> position only, direction unknown
+        }
+        buff[1] = '\0';
+        element->elemOffsetX = arrowCol;
+        element->elemOffsetY = 1;
         phase = PHASE_ROW1;
     }
 }
