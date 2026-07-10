@@ -192,10 +192,11 @@ const MULTICELL = {
     cells.push({dx:-W+1,dy:0,ch:'›'}); cells.push({dx:W-1,dy:0,ch:'‹'}); // inward level markers
     return cells;
   },
-  osd_adsb_cone_pos: () => {             // ADS-B collision cone: row0 = numeric scale, row1 = threat arrow. Left-anchored, 2 rows
+  osd_adsb_cone_pos: () => {             // ADS-B collision cone: row0 = numeric scale, row1 = threat arrow + our predicted-position marker. Left-anchored, 2 rows
     const scale = "-10───────0───────+10";                 // 21 wide: -X ... 0 ... +X (X = detection_cone/2 deg)
     const cells = [...scale].map((ch,i)=>({dx:i, dy:0, ch}));
     cells.push({dx:13, dy:1, ch:'▲'});   // sample: threat right of centre, closing head-on (arrow up)
+    cells.push({dx:7,  dy:1, ch:'+'});   // sample: our predicted position (crosshair marker) left of centre
     return cells;
   },
 };

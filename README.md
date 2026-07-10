@@ -83,10 +83,12 @@ An aircraft becomes a **critical threat** when it is **(a)** heading at you — 
 
   ```
   -10-------0-------+10     scale spanning ±(cone/2)°
-            ▲               threat position in the cone + relative-motion arrow
+       ✜    ▲               ✜ = our predicted position · ▲ = threat + relative-motion arrow
   ```
 
-  The arrow's **column** is where the threat sits in the cone (centre = dead-on collision course). Its **direction** is the angle between your motion vector and the aircraft's: **▲ up** = head-on (opposed vectors), **▼ down** = same course, **◄ / ►** = crossing traffic. If your own heading isn't trustworthy yet (no compass and GPS course not acquired) the arrow becomes **`?`** — the position is still valid (it's GPS-derived), only the direction is unknown.
+  The **threat arrow's column** is where the threat sits in the cone (centre = dead-on collision course); its **direction** is the angle between your motion vector and the aircraft's: **▲ up** = head-on (opposed vectors), **▼ down** = same course, **◄ / ►** = crossing traffic. If your own heading isn't trustworthy yet (no compass and GPS course not acquired) the arrow becomes **`?`** — position still valid (GPS-derived), only direction unknown.
+
+  The **crosshair ✜** marks **where you'll be at the threat's time-to-arrival, relative to where the aircraft will be, if both hold course** — the classic constant-bearing/decreasing-range collision cue. Centre = you'll occupy its position (**collision**); off to a side = you'll pass that side; if you're projected to leave the cone it becomes an **outward arrow at that edge** (you're clearing). Watch the gap between the two markers: closing = the encounter is worsening, opening = resolving. Uses GPS ground course (works without a compass); hidden when heading can't be trusted.
 
 Place every element with its `osd_..._pos` CLI key, or visually with the [OSD layout tool](#tools). New OSD elements aren't known to the stock Configurator, so they must be positioned via CLI / the tool.
 
