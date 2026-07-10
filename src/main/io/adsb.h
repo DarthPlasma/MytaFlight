@@ -109,4 +109,8 @@ uint8_t getVehiclesInDisplayRangeCount(void);       // active vehicles within th
 // (when provided) is set to that vehicle's time-to-arrival in seconds.
 adsbVehicle_t *findVehicleThreat(uint32_t *toaSecondsOut);
 
+// Predicted lateral miss angle (deg, signed: + = we pass to the aircraft's right) at the threat's
+// time-to-arrival, from projecting both GPS positions forward. False if it can't be computed.
+bool adsbThreatMissAngleDeg(const adsbVehicle_t *vehicle, uint32_t toaSeconds, int *missAngleDeg);
+
 #endif // USE_ADSB
