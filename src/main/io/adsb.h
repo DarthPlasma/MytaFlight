@@ -43,12 +43,17 @@ typedef struct adsbConfig_s {
     uint16_t maxDistVertM;    // hide it beyond this height ABOVE us (m); traffic below us is always shown
     uint16_t detectionCone;   // approach cone width for the critical warning (centidegrees, e.g. 2000 = +/-10 deg)
     uint16_t toaSeconds;      // approach time-to-arrival threshold for the critical warning (s)
+    uint8_t  maxVehicles;     // aircraft tracked simultaneously, runtime (ADSB_MIN_VEHICLES..ADSB_MAX_VEHICLES)
 } adsbConfig_t;
 
 PG_DECLARE(adsbConfig_t, adsbConfig);
 
 #define ADSB_CALL_SIGN_MAX_LENGTH 9
-#define ADSB_MAX_VEHICLES 5
+// Static capacity of the tracking list (also the CLI maximum for adsb_max_vehicle). The number of
+// slots actually used is runtime-configurable via adsbConfig()->maxVehicles, in [MIN, MAX].
+#define ADSB_MAX_VEHICLES 12
+#define ADSB_MIN_VEHICLES 5
+#define ADSB_DEFAULT_MAX_VEHICLES 5
 #define ADSB_MAX_SECONDS_KEEP_INACTIVE_PLANE_IN_LIST 10
 
 // Raw values received in an ADSB_VEHICLE MAVLink frame.
