@@ -348,12 +348,14 @@ adsbVehicle_t *findVehicleThreat(uint32_t *toaSecondsOut)
     return threat;
 }
 
-// Predicted lateral "miss" angle (degrees, signed) at the threat's time-to-arrival, assuming both
-// hold course and speed: project both GPS positions forward by toaSeconds, then report where WE end
-// up relative to where the AIRCRAFT ends up, as an angle about the current line of sight
-// (0 = we occupy its position = collision; positive = we pass to its RIGHT, negative to its LEFT).
-// Uses our GPS ground course/speed (not the compass). Returns false if it cannot be computed.
-bool adsbThreatMissAngleDeg(const adsbVehicle_t *vehicle, uint32_t toaSeconds, int *missAngleDeg)
+// Our PREDICTED angular position inside the aircraft's approach cone at the threat's time-to-arrival,
+// assuming both hold course and speed (degrees, signed: + = we are to the RIGHT of the aircraft's
+// nose, - to its left; 0 = dead ahead of it = collision course). Both GPS positions are projected
+// forward by toaSeconds, then we take our bearing as seen from the aircraft minus the aircraft's
+// heading. At toaSeconds -> 0 this equals our current cone position (-headingError), so the current
+// and predicted markers share one frame. Uses our GPS ground course/speed (not the compass).
+// Returns false if it cannot be computed.
+bool adsbOwnProjectedConeAngleDeg(const adsbVehicle_t *vehicle, uint32_t toaSeconds, int *angleDeg)
 {
     if (!vehicle || !vehicle->calculatedVehicleValues.valid || toaSeconds == 0) {
         return false;
@@ -362,12 +364,10 @@ bool adsbThreatMissAngleDeg(const adsbVehicle_t *vehicle, uint32_t toaSeconds, i
     const float t = (float)toaSeconds;
     const float d = (float)vehicle->calculatedVehicleValues.dist;                  // cm, current separation
     const float dirRad = vehicle->calculatedVehicleValues.dir * (M_PIf / 18000.0f); // cdeg -> rad
-    const float sinDir = sin_approx(dirRad);
-    const float cosDir = cos_approx(dirRad);
 
     // Aircraft position now, relative to us, in an East/North frame (cm).
-    const float aE = d * sinDir;
-    const float aN = d * cosDir;
+    const float aE = d * sin_approx(dirRad);
+    const float aN = d * cos_approx(dirRad);
 
     // Our velocity (E/N), from GPS ground course + ground speed.
     const float courseRad = gpsSol.groundCourse * (M_PIf / 1800.0f);               // decideg -> rad
@@ -381,16 +381,20 @@ bool adsbThreatMissAngleDeg(const adsbVehicle_t *vehicle, uint32_t toaSeconds, i
     const float vacE = v * sin_approx(headRad);
     const float vacN = v * cos_approx(headRad);
 
-    // Our position relative to the aircraft's, both projected to t = ToA.
-    const float wE = (vusE * t) - (aE + vacE * t);
-    const float wN = (vusN * t) - (aN + vacN * t);
+    // Vector from the aircraft's future position to ours (both projected to t = ToA).
+    const float uE = (vusE * t) - (aE + vacE * t);
+    const float uN = (vusN * t) - (aN + vacN * t);
 
-    // Component to the RIGHT of the current line of sight (unit vector at dir+90 = (cosDir, -sinDir)),
-    // turned into an angle at the current range (stable through the collision point, unlike a raw bearing).
-    const float lateral = wE * cosDir - wN * sinDir;
-    const float deg = atan2_approx(lateral, (d > 1.0f) ? d : 1.0f) * (180.0f / M_PIf);
+    // Our bearing as seen from the aircraft, minus the aircraft's heading = our angle in its cone.
+    float deg = atan2_approx(uE, uN) * (180.0f / M_PIf) - (vehicle->vehicleValues.heading / 100.0f);
+    while (deg > 180.0f) {
+        deg -= 360.0f;
+    }
+    while (deg < -180.0f) {
+        deg += 360.0f;
+    }
 
-    *missAngleDeg = (int)(deg + (deg >= 0.0f ? 0.5f : -0.5f));
+    *angleDeg = (int)(deg + (deg >= 0.0f ? 0.5f : -0.5f));
     return true;
 }
 
