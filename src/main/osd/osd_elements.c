@@ -2113,18 +2113,19 @@ static void osdElementAdsbCriticalWarning(osdElementParms_t *element)
 
 static void osdElementAdsbCone(osdElementParms_t *element)
 {
-    // Two-row "collision cone", shown only while an aircraft is a critical threat.
+    // Two-row "collision cone", shown only while an aircraft is a critical threat. The cone belongs
+    // to the AIRCRAFT (its approach cone); BOTH row-2 markers are US within it.
     //   Row 1: numeric scale spanning the detection cone, -X ... 0 ... +X, X = round(cone/2) deg.
-    //   Row 2 carries up to two markers:
-    //     * THREAT arrow  -- column = the aircraft's position in the cone (heading error vs. the
-    //       head-on course, 0 = dead centre); glyph = the angle between our motion vector and the
-    //       aircraft's (head-on -> up, same course -> down, crossing -> to that side), or '?' if our
-    //       heading isn't trustworthy.
-    //     * OUR predicted-position crosshair -- where we will be at ToA relative to where the
-    //       aircraft will be, if both hold course (see adsbThreatMissAngleDeg). Inside the cone it
-    //       is a crosshair; if we are projected to leave the cone it becomes an outward arrow at
-    //       that edge. Skipped when our heading can't be trusted (can't predict), or when it would
-    //       land on the threat arrow's column (drawn together -> just show the arrow).
+    //   Row 2:
+    //     * OUR CURRENT position (arrow) -- column = where we sit relative to the aircraft's nose now
+    //       (= -headingError; always inside the cone for a threat). Its glyph is the angle between our
+    //       motion vector and the aircraft's (head-on -> up, same course -> down, crossing -> to that
+    //       side), or '?' when our heading isn't trustworthy.
+    //     * OUR PREDICTED position at ToA (crosshair) -- same frame, both positions projected forward
+    //       (adsbOwnProjectedConeAngleDeg). Inside the cone -> crosshair; projected outside -> an
+    //       outward arrow at that edge. The gap between the two markers is the cue: closing toward
+    //       centre = worsening, opening / leaving = resolving. Skipped when our heading can't be
+    //       trusted (can't project), or when it lands on the current-position arrow (show arrow only).
     //
     // Row 1 goes through the element buffer (one displayWrite); the row-2 markers are written
     // directly (content only -- never spaces). The OSD resets the whole foreground each cycle, so an
@@ -2164,47 +2165,48 @@ static void osdElementAdsbCone(osdElementParms_t *element)
         }
     }
 
-    // --- Row 2: the threat arrow, plus our predicted-position marker. ---
+    // --- Row 2: our current position (arrow), plus our predicted position (crosshair). ---
     const uint8_t row2Y = element->elemPosY + 1;
     const bool headingValid = imuIsHeadingValid();
 
-    // Threat arrow: its position in the cone + our-motion-vs-its-motion direction (or '?').
+    // Our CURRENT position in the aircraft's cone = -(aircraft heading error). Glyph = our motion vs.
+    // the aircraft's (or '?' if heading isn't usable). Always inside the cone for a threat.
     int32_t headingError = (int32_t)vehicle->vehicleValues.heading - (vehicle->calculatedVehicleValues.dir + 18000);
     headingError = ((headingError % 36000) + 36000) % 36000;
     if (headingError > 18000) {
         headingError -= 36000;
     }
-    const int acErrDeg = constrain((int)(headingError / 100), -coneHalfDeg, coneHalfDeg);
-    const uint8_t acCol = constrain(centre + (acErrDeg * centre) / coneHalfDeg, 0, barWidth - 1);
-    char acGlyph;
+    const int nowDeg = constrain(-(int)(headingError / 100), -coneHalfDeg, coneHalfDeg);
+    const uint8_t nowCol = constrain(centre + (nowDeg * centre) / coneHalfDeg, 0, barWidth - 1);
+    char nowGlyph;
     if (headingValid) {
         int screenAngle = 180 - (vehicle->vehicleValues.heading / 100) + (attitude.values.yaw / 10);
         screenAngle = ((screenAngle % 360) + 360) % 360;
-        acGlyph = osdGetDirectionSymbolFromHeading(screenAngle);
+        nowGlyph = osdGetDirectionSymbolFromHeading(screenAngle);
     } else {
-        acGlyph = '?';
+        nowGlyph = '?';
     }
 
-    // Our predicted-position marker (only if our heading is usable -- otherwise we can't project).
-    uint8_t missCol = 0;
-    char missGlyph = 0;
-    int missDeg;
-    if (headingValid && adsbThreatMissAngleDeg(vehicle, toaSeconds, &missDeg)) {
-        if (missDeg > coneHalfDeg) {
-            missCol = barWidth - 1;
-            missGlyph = SYM_ARROW_EAST;      // projected to leave the cone on the right
-        } else if (missDeg < -coneHalfDeg) {
-            missCol = 0;
-            missGlyph = SYM_ARROW_WEST;      // projected to leave the cone on the left
+    // Our PREDICTED position at ToA, same frame (only if our heading is usable -- otherwise we can't project).
+    uint8_t predCol = 0;
+    char predGlyph = 0;
+    int predDeg;
+    if (headingValid && adsbOwnProjectedConeAngleDeg(vehicle, toaSeconds, &predDeg)) {
+        if (predDeg > coneHalfDeg) {
+            predCol = barWidth - 1;
+            predGlyph = SYM_ARROW_EAST;      // projected to leave the cone on the right
+        } else if (predDeg < -coneHalfDeg) {
+            predCol = 0;
+            predGlyph = SYM_ARROW_WEST;      // projected to leave the cone on the left
         } else {
-            missCol = constrain(centre + (missDeg * centre) / coneHalfDeg, 0, barWidth - 1);
-            missGlyph = SYM_AH_CENTER;       // predicted position inside the cone (crosshair marker)
+            predCol = constrain(centre + (predDeg * centre) / coneHalfDeg, 0, barWidth - 1);
+            predGlyph = SYM_AH_CENTER;       // predicted position inside the cone (crosshair marker)
         }
     }
 
-    osdDisplayWriteChar(element, element->elemPosX + acCol, row2Y, DISPLAYPORT_SEVERITY_NORMAL, acGlyph);
-    if (missGlyph && missCol != acCol) {     // coincident with the threat arrow -> show the arrow only
-        osdDisplayWriteChar(element, element->elemPosX + missCol, row2Y, DISPLAYPORT_SEVERITY_NORMAL, missGlyph);
+    osdDisplayWriteChar(element, element->elemPosX + nowCol, row2Y, DISPLAYPORT_SEVERITY_NORMAL, nowGlyph);
+    if (predGlyph && predCol != nowCol) {    // coincident with the current-position arrow -> arrow only
+        osdDisplayWriteChar(element, element->elemPosX + predCol, row2Y, DISPLAYPORT_SEVERITY_NORMAL, predGlyph);
     }
 }
 #endif
