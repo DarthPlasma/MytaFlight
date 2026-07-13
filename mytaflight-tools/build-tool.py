@@ -31,7 +31,14 @@ TARGETS = ["DAKEFPVH743", "TMOTORVELOXF7V2", "KAKUTEH7", "MAMBAH743", "MAMBAH743
            "KAKUTEF7",
            "FLYWOOF411",       # original Explorer LR (GOKU F411 Micro Stack)
            "FLYWOOF745AIOV2",  # Explorer LR 4" V2 HD (GOKU F7 16x16 stack)
-           "FLYWOOF722PROV2"]  # Explorer LR 4" O4 Pro (GOKU F722 Mini 45A stack)
+           "FLYWOOF722PROV2",  # Explorer LR 4" O4 Pro (GOKU F722 Mini 45A stack)
+           # SpeedyBee (SPEEDYBEEF405V4 already listed above)
+           "SPEEDYBEEF405V3", "SPEEDYBEEF405V5", "SPEEDYBEEF405MINI",
+           "SPEEDYBEEF7V3", "SPEEDYBEE_F745_AIO", "SPEEDYBEEF405AIOV2",
+           # Zeez (all mainline BF targets)
+           "ZEEZF7", "ZEEZF7V2", "ZEEZF7V3", "ZEEZWHOOP",
+           # BrainFPV — only the AIRBRAIN H743 exists in mainline Betaflight (RADIX boards aren't in the BF config)
+           "AIRBRAINH743"]
 
 # Whitelist of build flags the UI (and free-text custom defines) may pass. Guards the make
 # invocation. Allows an optional "=VALUE" for defines that take a value (e.g. TARGET_FLASH_SIZE=2048).
