@@ -38,7 +38,10 @@ TARGETS = ["DAKEFPVH743", "TMOTORVELOXF7V2", "KAKUTEH7", "MAMBAH743", "MAMBAH743
            # Zeez (all mainline BF targets)
            "ZEEZF7", "ZEEZF7V2", "ZEEZF7V3", "ZEEZWHOOP",
            # BrainFPV — only the AIRBRAIN H743 exists in mainline Betaflight (RADIX boards aren't in the BF config)
-           "AIRBRAINH743"]
+           "AIRBRAINH743",
+           # iFlight (IFLIGHT_BLITZ_H7_PRO already listed above; BF has ~25, these are the popular ones)
+           "IFLIGHT_BLITZ_F7_PRO", "IFLIGHT_BLITZ_F7_AIO", "IFLIGHT_BLITZ_F722", "IFLIGHT_BLITZ_F405",
+           "IFLIGHT_H743_AIO", "IFLIGHT_H743_AIO_V2", "IFLIGHT_F745_AIO", "IFLIGHT_SUCCEX_E_F7"]
 
 # Whitelist of build flags the UI (and free-text custom defines) may pass. Guards the make
 # invocation. Allows an optional "=VALUE" for defines that take a value (e.g. TARGET_FLASH_SIZE=2048).
