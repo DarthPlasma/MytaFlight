@@ -68,7 +68,7 @@
           <option value="30,16">Analog PAL — 30×16</option>
           <option value="30,13">Analog NTSC — 30×13</option>
           <option value="50,18">HDZero — 50×18</option>
-          <option value="53,20" selected>DJI O3/O4 — 53×20</option>
+          <option value="53,20" data-canvas="skip" selected>DJI O3/O4 — 53×20</option>
           <option value="60,22">WTF-OS (DJI FPV) — 60×22</option>
           <option value="53,20b">Walksnail — 53×20</option>
           <option value="35,24">Walksnail (tall) — 35×24</option>
@@ -165,7 +165,7 @@ const GLYPHS = { [GT]:GLYPH_SVG.thermo, [GV]:GLYPH_SVG.volt, [GB]:GLYPH_SVG.batt
 
 const SAMPLES = {
   osd_vbat_pos: GB+"16.8"+GV, osd_sag_comp_batt_pos:"16.8"+GV, osd_avg_cell_voltage_pos: GB+"4.20"+GV,
-  osd_battery_impedance_pos:"  18mR", osd_battery_temp_pos:"B"+GT+" 45"+GD, osd_rssi_pos:"RSS99", osd_link_quality_pos:"LQ:99",
+  osd_battery_impedance_pos:"0.014R", osd_battery_temp_pos:"B"+GT+" 45"+GD, osd_rssi_pos:"RSS99", osd_link_quality_pos:"LQ:99",
   osd_craft_name_pos:"CRAFTNAME", osd_current_pos:"12.4"+GA, osd_mah_drawn_pos:"1234mAh",
   osd_power_pos:"210W", osd_altitude_pos: GL+"12.3m", osd_gps_speed_pos:"45",
   osd_gps_sats_pos: GS+"12", osd_gps_lat_pos:"47.1234", osd_gps_lon_pos:" 9.5678",
@@ -174,6 +174,7 @@ const SAMPLES = {
   osd_core_temp_pos:"C"+GT+" 45"+GD, osd_esc_tmp_pos:"E"+GT+" 45"+GD, osd_g_force_pos:"1.2G",
   osd_pit_ang_pos:"P-4.5°", osd_rol_ang_pos:"R 2.3°",
   osd_adsb_warning_pos: GR+"2.3km +150", osd_adsb_info_pos: GR+"LARGE 250kmh PEGASO1", osd_adsb_status_pos:"A5/2",
+  osd_adsb_critical_warning_pos:"AIRCRAFT APPROACHING 45S",
   osd_compass_bar_pos:"──N─┃─E──", osd_flymode_pos:"ANGL", osd_throttle_pos:"35%", osd_warnings_pos:"LAND NOW",
 };
 
@@ -189,6 +190,13 @@ const MULTICELL = {
     const W=7, H=3, cells=[];
     for(let dy=-H; dy<=H; dy++){ cells.push({dx:-W,dy,ch:'│'}); cells.push({dx:W,dy,ch:'│'}); }
     cells.push({dx:-W+1,dy:0,ch:'›'}); cells.push({dx:W-1,dy:0,ch:'‹'}); // inward level markers
+    return cells;
+  },
+  osd_adsb_cone_pos: () => {             // ADS-B collision cone (the aircraft's cone): row0 = scale, row1 = us now (arrow) + us predicted (crosshair). Left-anchored, 2 rows
+    const scale = "-10───────0───────+10";                 // 21 wide: -X ... 0 ... +X (X = detection_cone/2 deg)
+    const cells = [...scale].map((ch,i)=>({dx:i, dy:0, ch}));
+    cells.push({dx:11, dy:1, ch:'▲'});   // sample: our current position (arrow), just right of centre
+    cells.push({dx:6,  dy:1, ch:'+'});   // sample: our predicted position at ToA (crosshair), moving left = resolving
     return cells;
   },
 };
@@ -299,9 +307,23 @@ function renderList(){
   });
 }
 
+// osd_canvas_width/osd_canvas_height (osd.h: canvas_cols/canvas_rows) tell the FC how many
+// characters the connected display can show; elements beyond canvas_rows get collapsed onto the
+// last row instead of drawn where placed. DJI O3/O4 negotiate their own canvas over MSP and
+// ignore/override these, so they're left at firmware default (not emitted) for that preset.
+function canvasSetLines(){
+  const opt = $('preset').selectedOptions[0];
+  if (opt && opt.dataset.canvas === 'skip') return [];
+  return [
+    '# canvas size for the selected video system (osd.h: canvas_cols/canvas_rows)',
+    `set osd_canvas_width = ${COLS}`,
+    `set osd_canvas_height = ${ROWS}`,
+  ];
+}
 function renderOutput(){
-  $('output').value = elements.slice().sort((a,b)=>a.name.localeCompare(b.name))
-    .map(el=>`set ${el.name} = ${valueOf(el)}`).join('\n');
+  const posLines = elements.slice().sort((a,b)=>a.name.localeCompare(b.name))
+    .map(el=>`set ${el.name} = ${valueOf(el)}`);
+  $('output').value = [...canvasSetLines(), ...posLines].join('\n');
 }
 function syncDatalist(){
   $('known').innerHTML = [...Object.keys(SAMPLES), ...Object.keys(MULTICELL)].map(n=>`<option value="${n}">`).join('');
@@ -366,7 +388,7 @@ function buildPreview(){
     ['Battery temp',            'B'+T+' 25'+D, false],
     ['— alarm (out of range)',  'B'+T+' 65'+D, true],
     ['— sensor absent',         'B'+T+'---'+D, false],
-    ['Battery impedance',       '18mR', false],
+    ['Battery impedance',       '0.014R', false],
     ['Sag-comp voltage',        '16.8'+V, false],
   ];
   $('preview').innerHTML = rows.map(([lbl,val,blink])=>
