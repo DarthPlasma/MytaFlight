@@ -241,12 +241,11 @@ const MOTOR = [
   ["",          "PWM"],
 ];
 
-// ---- This fork's own features. "Cruise" has no build flag of its own: it needs Position
-// Hold compiled in (forced on below if checked) and is a runtime CLI setting after flashing. ----
+// ---- This fork's own features. (The old "Position-hold CRUISE" entry is gone: Betaflight
+// 2026.6.1 does velocity-stick position hold natively, so there is nothing to opt into.) ----
 const CUSTOM = [
   [["USE_TEMPERATURE_SENSOR"], "Temperature sensor (I2C)", false],
   [["USE_ADSB"],               "ADS-B traffic (needs GPS)", false],
-  [["__CRUISE__"],             "Position-hold CRUISE (velocity-stick)", true],
 ];
 
 // ---- Everything else BF supports, as independently toggleable checkboxes under CLOUD_BUILD.
@@ -339,15 +338,10 @@ function computeOptions(){
   if (motor) opts.push(motor);
 
   // This fork's features
-  const custom = checkedFlags("grp-custom");
-  const cruiseChecked = custom.includes("__CRUISE__");
-  opts.push(...custom.filter(f=>f!=="__CRUISE__"));
+  opts.push(...checkedFlags("grp-custom"));
 
   // Other options
   opts.push(...checkedFlags("grp-other"));
-
-  // Cruise needs Position Hold compiled in, regardless of that checkbox's own state.
-  if (cruiseChecked) opts.push("USE_POSITION_HOLD");
 
   // ADS-B needs GPS on every board, and receives ADSB_VEHICLE frames over MAVLink telemetry
   // (telemetry/mavlink.c, gated by USE_TELEMETRY_MAVLINK) — useless without it, so pull both in
@@ -358,8 +352,8 @@ function computeOptions(){
     if (!opts.includes("USE_TELEMETRY")) opts.push("USE_TELEMETRY");
   }
 
-  // Position Hold (and so Cruise, which forces it above) needs a position source: GPS or
-  // Optical Flow. Without either, common_post.h's #error stops the build.
+  // Position Hold needs a position source: GPS or Optical Flow. Without either,
+  // common_post.h's #error stops the build.
   if (opts.includes("USE_POSITION_HOLD") && !opts.includes("USE_GPS") && !opts.includes("USE_OPTICALFLOW")) {
     opts.push("USE_GPS");
   }
@@ -375,18 +369,15 @@ function computeOptions(){
   $("customWarn").style.display = invalid.length ? "block" : "none";
   $("customWarn").textContent = invalid.length ? ("Ignored (doesn't look like a define): " + invalid.join(", ")) : "";
 
-  return { opts: [...new Set(opts)], cruiseChecked };
+  return { opts: [...new Set(opts)] };
 }
 
 function refresh(){
   updateTelemetryUI();
-  const { opts, cruiseChecked } = computeOptions();
+  const { opts } = computeOptions();
   $("cmdPreview").textContent = "make " + $("target").value + (opts.length? ` OPTIONS="${opts.join(" ")}"` : "");
 
-  const postFlash = [];
-  if (cruiseChecked) postFlash.push("set pos_hold_navmode = CRUISE");
-  $("postFlashPanel").style.display = postFlash.length ? "block" : "none";
-  $("postFlashCli").textContent = postFlash.join("\n");
+  $("postFlashPanel").style.display = "none";
 }
 document.addEventListener("change", refresh);
 document.addEventListener("input", refresh);
