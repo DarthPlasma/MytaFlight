@@ -43,7 +43,7 @@ make TMOTORVELOXF7V2 OPTIONS="USE_TEMPERATURE_SENSOR USE_ADSB USE_GPS"
 ### Branches (all pushed to the fork)
 | Branch | Contents |
 |--------|----------|
-| `master` | pristine upstream base (14e6e1b) |
+| `master` | pristine upstream base (= tag `2026.6.1`) |
 | `feature/battery-impedance` | Feature A (battery impedance) |
 | `feature/temp-sensors` | Feature B (I2C temperature) + both tools live here historically |
 | `feature/adsb` | Feature C (ADS-B) |
