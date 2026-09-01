@@ -162,6 +162,7 @@
 #include "flight/pid.h"
 #include "flight/pos_hold.h"
 
+#include "io/adsb.h"
 #include "io/gps.h"
 #include "io/vtx.h"
 
@@ -2062,6 +2063,186 @@ static void osdElementSys(osdElementParms_t *element)
 }
 #endif
 
+#ifdef USE_ADSB
+static void osdElementAdsbWarning(osdElementParms_t *element)
+{
+    // Show the aircraft on a critical approach course, if any (the same one that triggers the
+    // "AIRCRAFT APPROACHING" warning), so the arrow/distance/vertical data always matches the
+    // active alert instead of possibly pointing at a closer-but-receding aircraft. Otherwise fall
+    // back to the closest tracked aircraft. Nothing is shown when there is no traffic/GPS fix.
+    adsbVehicle_t *vehicle = findVehicleThreat(NULL);
+    if (!vehicle) {
+        vehicle = findVehicleClosestForDisplay();
+    }
+    if (!vehicle) {
+        return;
+    }
+
+    const int relativeDeciDegrees = (vehicle->calculatedVehicleValues.dir / 10) - attitude.values.yaw;
+    const uint8_t arrow = osdGetDirectionSymbolFromHeading(DECIDEGREES_TO_DEGREES(relativeDeciDegrees));
+
+    char distanceString[8];
+    osdFormatDistanceString(distanceString, vehicle->calculatedVehicleValues.dist / 100, SYM_NONE); // cm -> m
+
+    const int verticalMeters = vehicle->calculatedVehicleValues.verticalDistance / 100; // cm -> m
+    tfp_sprintf(element->buff, "%c%s %c%d", arrow, distanceString, (verticalMeters < 0) ? '-' : '+', abs(verticalMeters));
+}
+
+static void osdElementAdsbInfo(osdElementParms_t *element)
+{
+    // Extended view of the same vehicle shown by osdElementAdsbWarning (the active threat, if
+    // any, otherwise the closest tracked aircraft): which way it is MOVING (relative to our
+    // heading), its class, ground speed and callsign.
+    adsbVehicle_t *vehicle = findVehicleThreat(NULL);
+    if (!vehicle) {
+        vehicle = findVehicleClosestForDisplay();
+    }
+    if (!vehicle) {
+        return;
+    }
+
+    const int movementDeciDegrees = (vehicle->vehicleValues.heading / 10) - attitude.values.yaw; // course cdeg -> deci
+    const uint8_t movementArrow = osdGetDirectionSymbolFromHeading(DECIDEGREES_TO_DEGREES(movementDeciDegrees));
+
+    char callsign[ADSB_CALL_SIGN_MAX_LENGTH];
+    memcpy(callsign, vehicle->vehicleValues.callsign, sizeof(callsign));
+    callsign[ADSB_CALL_SIGN_MAX_LENGTH - 1] = '\0'; // ensure termination
+
+    tfp_sprintf(element->buff, "%c%s %c%d%c %s",
+        movementArrow,
+        adsbEmitterTypeString(vehicle->vehicleValues.emitterType),
+        SYM_SPEED, osdGetSpeedToSelectedUnit(vehicle->vehicleValues.horVelocity), osdGetSpeedToSelectedUnitSymbol(),
+        callsign);
+}
+
+static void osdElementAdsbStatus(osdElementParms_t *element)
+{
+    // "A<detected>/<in range>": aircraft tracked at detection range, and those within the
+    // configured distance/height limits.
+    tfp_sprintf(element->buff, "A%d/%d", getActiveVehiclesCount(), getVehiclesInDisplayRangeCount());
+}
+
+static void osdElementAdsbCriticalWarning(osdElementParms_t *element)
+{
+    // Dedicated, independently-positionable warning for an aircraft on a critical approach course
+    // (cone + ToA + vertical). Decoupled from the generic OSD_WARNINGS element so it can't be
+    // pre-empted by higher-priority warnings and can be placed clear of other elements. Steady
+    // (not blinking): blinking was getting dropped/hidden on MSP DisplayPort, and steady reads better.
+    //
+    // Severity stays NORMAL on purpose. On MSP DisplayPort (DJI/WTFOS) the severity picks a FONT
+    // PAGE via displayPortProfile.fontSelection[severity] (default {0,1,2,3}); SEVERITY_CRITICAL
+    // selects font page 3, which on most goggles has no ASCII glyphs -> the text is written but
+    // rendered blank (invisible). NORMAL uses the base font, so the warning actually shows.
+    uint32_t toaSeconds;
+    if (findVehicleThreat(&toaSeconds)) {
+        // Uppercase 'S' for seconds: lowercase letters 0x60-0x7A are special glyphs in the OSD
+        // font (e.g. 's' 0x73 = artificial-horizon centre), so OSD text must be all-caps.
+        tfp_sprintf(element->buff, "AIRCRAFT APPROACHING %uS", toaSeconds);
+    } else {
+        element->buff[0] = '\0';   // no threat: render empty (clears the element's cells)
+    }
+}
+
+static void osdElementAdsbCone(osdElementParms_t *element)
+{
+    // Two-row "collision cone", shown only while an aircraft is a critical threat. The cone belongs
+    // to the AIRCRAFT (its approach cone); BOTH row-2 markers are US within it.
+    //   Row 1: numeric scale spanning the detection cone, -X ... 0 ... +X, X = round(cone/2) deg.
+    //   Row 2:
+    //     * OUR CURRENT position (arrow) -- column = where we sit relative to the aircraft's nose now
+    //       (= -headingError; always inside the cone for a threat). Its glyph is the angle between our
+    //       motion vector and the aircraft's (head-on -> up, same course -> down, crossing -> to that
+    //       side), or '?' when our heading isn't trustworthy.
+    //     * OUR PREDICTED position at ToA (crosshair) -- same frame, both positions projected forward
+    //       (adsbOwnProjectedConeAngleDeg). Inside the cone -> crosshair; projected outside -> an
+    //       outward arrow at that edge. The gap between the two markers is the cue: closing toward
+    //       centre = worsening, opening / leaving = resolving. Skipped when our heading can't be
+    //       trusted (can't project), or when it lands on the current-position arrow (show arrow only).
+    //
+    // Row 1 goes through the element buffer (one displayWrite); the row-2 markers are written
+    // directly (content only -- never spaces). The OSD resets the whole foreground each cycle, so an
+    // element must only ever write its OWN cells: writing spaces would blank overlapping elements.
+    const uint8_t barWidth = 21;             // odd -> exact centre column
+    const uint8_t centre = barWidth / 2;
+
+    uint32_t toaSeconds = 0;
+    adsbVehicle_t *vehicle = findVehicleThreat(&toaSeconds);
+    if (!vehicle) {
+        element->buff[0] = '\0';             // no threat: draw nothing, don't touch our footprint
+        return;
+    }
+
+    int coneHalfDeg = (adsbConfig()->detectionCone + 100) / 200;   // half-cone, degrees, rounded
+    if (coneHalfDeg < 1) {
+        coneHalfDeg = 1;
+    }
+
+    // --- Row 1: the "-X ... 0 ... +X" scale (element buffer, drawn at the anchor). ---
+    char *buff = element->buff;
+    for (uint8_t i = 0; i < barWidth; i++) {
+        buff[i] = '-';
+    }
+    buff[barWidth] = '\0';
+    buff[centre] = '0';
+    char num[8];
+    int len = tfp_sprintf(num, "-%d", coneHalfDeg);
+    for (int i = 0; i < len && i < centre; i++) {
+        buff[i] = num[i];
+    }
+    len = tfp_sprintf(num, "+%d", coneHalfDeg);
+    for (int i = 0; i < len; i++) {
+        const int col = barWidth - len + i;
+        if (col > centre) {
+            buff[col] = num[i];
+        }
+    }
+
+    // --- Row 2: our current position (arrow), plus our predicted position (crosshair). ---
+    const uint8_t row2Y = element->elemPosY + 1;
+    const bool headingValid = imuIsHeadingValid();
+
+    // Our CURRENT position in the aircraft's cone = -(aircraft heading error). Glyph = our motion vs.
+    // the aircraft's (or '?' if heading isn't usable). Always inside the cone for a threat.
+    int32_t headingError = (int32_t)vehicle->vehicleValues.heading - (vehicle->calculatedVehicleValues.dir + 18000);
+    headingError = ((headingError % 36000) + 36000) % 36000;
+    if (headingError > 18000) {
+        headingError -= 36000;
+    }
+    const int nowDeg = constrain(-(int)(headingError / 100), -coneHalfDeg, coneHalfDeg);
+    const uint8_t nowCol = constrain(centre + (nowDeg * centre) / coneHalfDeg, 0, barWidth - 1);
+    char nowGlyph;
+    if (headingValid) {
+        int screenAngle = 180 - (vehicle->vehicleValues.heading / 100) + (attitude.values.yaw / 10);
+        screenAngle = ((screenAngle % 360) + 360) % 360;
+        nowGlyph = osdGetDirectionSymbolFromHeading(screenAngle);
+    } else {
+        nowGlyph = '?';
+    }
+
+    // Our PREDICTED position at ToA, same frame (only if our heading is usable -- otherwise we can't project).
+    uint8_t predCol = 0;
+    char predGlyph = 0;
+    int predDeg;
+    if (headingValid && adsbOwnProjectedConeAngleDeg(vehicle, toaSeconds, &predDeg)) {
+        if (predDeg > coneHalfDeg) {
+            predCol = barWidth - 1;
+            predGlyph = SYM_ARROW_EAST;      // projected to leave the cone on the right
+        } else if (predDeg < -coneHalfDeg) {
+            predCol = 0;
+            predGlyph = SYM_ARROW_WEST;      // projected to leave the cone on the left
+        } else {
+            predCol = constrain(centre + (predDeg * centre) / coneHalfDeg, 0, barWidth - 1);
+            predGlyph = SYM_AH_CENTER;       // predicted position inside the cone (crosshair marker)
+        }
+    }
+
+    osdDisplayWriteChar(element, element->elemPosX + nowCol, row2Y, DISPLAYPORT_SEVERITY_NORMAL, nowGlyph);
+    if (predGlyph && predCol != nowCol) {    // coincident with the current-position arrow -> arrow only
+        osdDisplayWriteChar(element, element->elemPosX + predCol, row2Y, DISPLAYPORT_SEVERITY_NORMAL, predGlyph);
+    }
+}
+#endif
+
 // Define the order in which the elements are drawn.
 // Elements positioned later in the list will overlay the earlier
 // ones if their character positions overlap
@@ -2106,6 +2287,13 @@ static const uint8_t osdElementDisplayOrder[] = {
     OSD_ROLL_ANGLE,
     OSD_MAIN_BATT_USAGE,
     OSD_DISARMED,
+#ifdef USE_ADSB
+    OSD_ADSB_WARNING,
+    OSD_ADSB_INFO,
+    OSD_ADSB_STATUS,
+    OSD_ADSB_CRITICAL_WARNING,
+    OSD_ADSB_CONE,
+#endif
     OSD_NUMERICAL_HEADING,
     OSD_READY_MODE,
 #ifdef USE_POSITION_HOLD
@@ -2259,6 +2447,13 @@ const osdElementDrawFn osdElementDrawFunction[OSD_ITEM_COUNT] = {
 #endif
     [OSD_MAIN_BATT_USAGE]         = osdElementMainBatteryUsage,
     [OSD_DISARMED]                = osdElementDisarmed,
+#ifdef USE_ADSB
+    [OSD_ADSB_WARNING]            = osdElementAdsbWarning,
+    [OSD_ADSB_INFO]               = osdElementAdsbInfo,
+    [OSD_ADSB_STATUS]             = osdElementAdsbStatus,
+    [OSD_ADSB_CRITICAL_WARNING]   = osdElementAdsbCriticalWarning,
+    [OSD_ADSB_CONE]               = osdElementAdsbCone,
+#endif
 #ifdef USE_GPS
     [OSD_HOME_DIR]                = osdElementGpsHomeDirection,
     [OSD_HOME_DIST]               = osdElementGpsHomeDistance,

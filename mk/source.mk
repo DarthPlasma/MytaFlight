@@ -131,6 +131,7 @@ COMMON_SRC = \
             fc/tasks.c \
             fc/runtime_config.c \
             fc/stats.c \
+            io/adsb.c \
             io/beeper.c \
             io/piniobox.c \
             io/serial.c \
