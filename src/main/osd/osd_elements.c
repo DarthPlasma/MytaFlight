@@ -2121,7 +2121,8 @@ static void osdElementAdsbCone(osdElementParms_t *element)
     //       (= -headingError; always inside the cone for a threat). Its glyph is the angle between our
     //       motion vector and the aircraft's (head-on -> up, same course -> down, crossing -> to that
     //       side), or '?' when our heading isn't trustworthy.
-    //     * OUR PREDICTED position at ToA (crosshair) -- same frame, both positions projected forward
+    //     * OUR PREDICTED position at ToA (crosshair) -- same frame: the current cone stays frozen and
+    //       only our position is moved forward by our velocity for ToA = distance / aircraft speed
     //       (adsbOwnProjectedConeAngleDeg). Inside the cone -> crosshair; projected outside -> an
     //       outward arrow at that edge. The gap between the two markers is the cue: closing toward
     //       centre = worsening, opening / leaving = resolving. Skipped when our heading can't be
