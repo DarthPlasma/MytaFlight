@@ -348,13 +348,17 @@ adsbVehicle_t *findVehicleThreat(uint32_t *toaSecondsOut)
     return threat;
 }
 
-// Our PREDICTED angular position inside the aircraft's approach cone at the threat's time-to-arrival,
-// assuming both hold course and speed (degrees, signed: + = we are to the RIGHT of the aircraft's
-// nose, - to its left; 0 = dead ahead of it = collision course). Both GPS positions are projected
-// forward by toaSeconds, then we take our bearing as seen from the aircraft minus the aircraft's
-// heading. At toaSeconds -> 0 this equals our current cone position (-headingError), so the current
-// and predicted markers share one frame. Uses our GPS ground course/speed (not the compass).
-// Returns false if it cannot be computed.
+// Our PREDICTED angular position inside the aircraft's CURRENT approach cone at the threat's
+// time-to-arrival (degrees, signed: + = we are to the RIGHT of the aircraft's nose, - to its left;
+// 0 = dead ahead of it = collision course). The cone stays frozen where it is now (apex = the
+// aircraft's current position, axis = its current heading); only OUR position is moved forward by
+// our GPS velocity for toaSeconds (= current distance / aircraft speed), then we take its bearing as
+// seen from the aircraft's current position minus the aircraft's heading.
+// Deliberately NOT moving the aircraft too: at ToA it would sit roughly on our current position, so the
+// bearing to us would degenerate (noise when hovering, a jump to ~90 deg for any sideways motion). With
+// the frozen cone a hover keeps the marker still and a sidestep shows up in proportion to the range.
+// At toaSeconds -> 0 this equals our current cone position (-headingError): both markers share one frame.
+// Uses our GPS ground course/speed (not the compass). Returns false if it cannot be computed.
 bool adsbOwnProjectedConeAngleDeg(const adsbVehicle_t *vehicle, uint32_t toaSeconds, int *angleDeg)
 {
     if (!vehicle || !vehicle->calculatedVehicleValues.valid || toaSeconds == 0) {
@@ -365,7 +369,7 @@ bool adsbOwnProjectedConeAngleDeg(const adsbVehicle_t *vehicle, uint32_t toaSeco
     const float d = (float)vehicle->calculatedVehicleValues.dist;                  // cm, current separation
     const float dirRad = vehicle->calculatedVehicleValues.dir * (M_PIf / 18000.0f); // cdeg -> rad
 
-    // Aircraft position now, relative to us, in an East/North frame (cm).
+    // Aircraft position now, relative to us, in an East/North frame (cm). This is the cone apex.
     const float aE = d * sin_approx(dirRad);
     const float aN = d * cos_approx(dirRad);
 
@@ -375,17 +379,11 @@ bool adsbOwnProjectedConeAngleDeg(const adsbVehicle_t *vehicle, uint32_t toaSeco
     const float vusE = gs * sin_approx(courseRad);
     const float vusN = gs * cos_approx(courseRad);
 
-    // Aircraft velocity (E/N), from its course over ground + horizontal speed.
-    const float headRad = vehicle->vehicleValues.heading * (M_PIf / 18000.0f);     // cdeg -> rad
-    const float v = (float)vehicle->vehicleValues.horVelocity;                     // cm/s
-    const float vacE = v * sin_approx(headRad);
-    const float vacN = v * cos_approx(headRad);
+    // Vector from the aircraft's CURRENT position to where we will be at t = ToA.
+    const float uE = (vusE * t) - aE;
+    const float uN = (vusN * t) - aN;
 
-    // Vector from the aircraft's future position to ours (both projected to t = ToA).
-    const float uE = (vusE * t) - (aE + vacE * t);
-    const float uN = (vusN * t) - (aN + vacN * t);
-
-    // Our bearing as seen from the aircraft, minus the aircraft's heading = our angle in its cone.
+    // Our bearing as seen from the cone apex, minus the aircraft's heading = our angle in its cone.
     float deg = atan2_approx(uE, uN) * (180.0f / M_PIf) - (vehicle->vehicleValues.heading / 100.0f);
     while (deg > 180.0f) {
         deg -= 360.0f;
