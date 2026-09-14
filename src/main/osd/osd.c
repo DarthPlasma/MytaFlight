@@ -558,28 +558,10 @@ void osdInit(displayPort_t *osdDisplayPortToUse, osdDisplayPortDevice_e displayP
             osdConfigMutable()->canvas_rows = osdDisplayPort->rows;
         }
 
-        // Ensure that all OSD elements are on the canvas once number of row/columns is known
-        for (int i = 0; i < OSD_ITEM_COUNT; i++) {
-            uint16_t itemPos = osdElementConfig()->item_pos[i];
-            uint8_t elemPosX = OSD_X(itemPos);
-            uint8_t elemPosY = OSD_Y(itemPos);
-            uint16_t elemProfileType = itemPos & (OSD_PROFILE_MASK | OSD_TYPE_MASK);
-            bool pos_reset = false;
-
-            if (elemPosX >= osdDisplayPort->cols) {
-                elemPosX = osdDisplayPort->cols - 1;
-                pos_reset  = true;
-            }
-
-            if (elemPosY >= osdDisplayPort->rows) {
-                elemPosY = osdDisplayPort->rows - 1;
-                pos_reset  = true;
-            }
-
-            if (pos_reset) {
-                osdElementConfigMutable()->item_pos[i] = elemProfileType | OSD_POS(elemPosX, elemPosY);
-            }
-        }
+        // MyTAflight: element positions are never clamped to the canvas. Upstream rewrote every
+        // off-canvas position to cols-1/rows-1 and the next save made it permanent, which destroyed
+        // WTFOS layouts (60x22) whenever the canvas was briefly smaller. Off-canvas elements are
+        // simply not shown: MAX7456/FBOSD drivers bound-check writes, MSP forwards to the VTX.
     }
 }
 
