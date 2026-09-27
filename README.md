@@ -104,6 +104,36 @@ Place every element with its `osd_..._pos` CLI key, or visually with the [OSD la
 
 This fork used to add an iNAV-style mode where, inside POS HOLD, stick deflection commands a **wind-compensated velocity** instead of handing over to raw angle mode (field-validated on a DAKEFPV H743). **Betaflight 2026.6.1 implemented the same concept natively**: in position hold, sticks now command a target velocity (full stick = `ap_max_velocity`, with feedforward), the position fence follows the craft, and releasing the sticks brakes to a hold — no configuration needed. Our implementation was therefore retired during the rebase onto stable; the historical branch lives on as `backup-alpha/feature/poshold-vector`. The `pos_hold_navmode` CLI setting no longer exists.
 
+---
+
+## Upstream bug fixes
+
+Two defects in stock Betaflight `2026.6.1` are fixed here. Unlike features A–C these are **not gated**: they change behaviour that upstream ships, in every build of this fork.
+
+### GPS Rescue returned to the arming point instead of home
+
+**Symptom (field-observed).** With `gps_set_home_point_once = ON`, land 200 m away from home, re-arm without a power cycle, then trigger RTH: the craft flies to the **re-arm point**, while the OSD home arrow and distance still point at the real home. The failsafe GPS-Rescue procedure is affected the same way.
+
+**Cause.** The legacy rescue controller never reads `GPS_home_llh`. It reads the position estimator, whose XY origin is the point where horizontal fusion started — normally the arming point (`gps_rescue_multirotor.c`: *"relative to arming location, not absolute"*). `distanceToHomeCm` is the norm of that vector and the target step is its negation, so the rescue's "home" **is** the arming point. With the default `gps_set_home_point_once = OFF` home is re-set at every arm, the two coincide, and the bug stays hidden. Regression from upstream `GPS Rescue2026_6a (#15382)`.
+
+**Fix** (`feature/rescue-home-fix`). In `sensorUpdate()`, subtract the origin→`GPS_home_llh` offset (`GPS_distance2d`, obtained through the same `positionEstimatorGetGpsOrigin()` API the flight-plan rescue builder uses) from the estimated position, so distance, bearing and target step all refer to the home the pilot sees. ~15 lines, +336 B of flash. Verified on the host: hovering over home, stock reports 250 m to home and would fly away; patched reports 0 m.
+
+Upstream's own flight-plan rescue (`ENABLE_RESCUE_PLAN`) already builds its waypoints on `GPS_home_llh` and is not affected — but it needs `USE_FLIGHT_PLAN`, defined in `2026.6.1` **only for SITL targets**, so every real build runs the legacy path. Building with the Flight Plan option (+24 KB) makes this fix inert and also swaps in a completely different guidance and landing controller.
+
+> ℹ️ **Adjacent gotcha, not a bug.** Pos hold and GPS Rescue need a valid heading, and a working compass is *not* accepted unless `trust_mag = ON` (default `OFF`). Otherwise heading must be re-learned from GPS course-over-ground with straight flight above 1 m/s **after every arm**. The flight-plan rescue does the same thing, holding and pitching forward, and aborts the mission if heading never becomes valid. Calibrate and verify the compass, then `set trust_mag = ON`.
+
+### OSD elements were forced inside the canvas
+
+**Symptom.** Elements placed outside the 53×20 HD canvas — a WTFOS 60×22 layout, say — are pushed to the canvas edge, and the change becomes permanent at the next save.
+
+**Cause.** `osdInit()` rewrote every off-canvas position to `cols-1`/`rows-1` and stored it back into the element config; any later save (CLI `save`, the stats save at disarm, the Configurator) persisted it. Upstream code, present in `2026.6.1`.
+
+**Fix** (`feature/osd-canvas`). Saved positions are never rewritten. Off-canvas elements simply aren't shown: the MAX7456 and framebuffer drivers bound-check their writes, and MSP forwards the coordinates to the goggles. The same branch restores the `osd_canvas_width` / `osd_canvas_height` CLI settings (under `OSD_CANVAS_TOOL`, enabled by default in the build tool), which are what let you declare a 60×22 WTFOS canvas in the first place.
+
+> ⚠️ Positions already clamped by an earlier firmware cannot be recovered — paste back a CLI `diff` saved before the clamp happened.
+
+---
+
 ## Tools
 
 Browser-based helpers in `mytaflight-tools/`:
@@ -122,7 +152,9 @@ Browser-based helpers in `mytaflight-tools/`:
 | `feature/battery-impedance` | Feature A |
 | `feature/temp-sensors` | Feature B (+ tools, historically) |
 | `feature/adsb` | Feature C |
-| **`integration`** | **all four features + tools — flash this one** |
+| `feature/osd-canvas` | canvas CLI + no position clamping ([fix](#osd-elements-were-forced-inside-the-canvas)) |
+| `feature/rescue-home-fix` | GPS Rescue returns to home ([fix](#gps-rescue-returned-to-the-arming-point-instead-of-home)) |
+| **`integration`** | **all features + fixes + tools — flash this one** |
 
 Feature branches are independent (each off `master`) for clean rebasing onto upstream; `integration` is where they come together.
 

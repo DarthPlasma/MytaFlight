@@ -47,6 +47,8 @@ make TMOTORVELOXF7V2 OPTIONS="USE_TEMPERATURE_SENSOR USE_ADSB USE_GPS"
 | `feature/battery-impedance` | Feature A (battery impedance) |
 | `feature/temp-sensors` | Feature B (I2C temperature) + both tools live here historically |
 | `feature/adsb` | Feature C (ADS-B) |
+| `feature/osd-canvas` | `osd_canvas_width/height` CLI + removal of upstream's OSD position clamp (§4b) |
+| `feature/rescue-home-fix` | GPS Rescue returns to `GPS_home_llh` instead of the arming point (§4b) |
 | `backup-alpha/feature/poshold-vector` | Feature D (CRUISE) — **RETIRED**: superseded by stock BF 2026.6.1 (native velocity-stick pos hold) |
 | **`integration`** | merges A+B+C+**D** + tools (build-tool, osd-layout, taranis-sitl-rc, SITL-GAZEBO.md). The branch to flash. Feature D merged 2026-07-05 (commit f8ac642) with default `ANGLE`, **field-validated 2026-07-06** (PID tuning pending). |
 
@@ -107,6 +109,27 @@ Key finding: modern BF master **already has** a Kalman position/velocity estimat
 - **Status (2026-07-06): merged to `integration` (f8ac642); FIELD-VALIDATED on DAKEFPVH743.** Works exactly as designed: pitch/roll stick signs correct, brake-to-hold on release (small overshoot to the deadband-entry point, as in iNAV), and no crosswind drift (velocity vector is wind-compensated — the core goal). Only PID tuning remains (notably altitude). Earth-frame math also validated offline (native C test, 13/13). SITL could **not** validate it: getting a quad to fly pos-hold in the SITL+Gazebo setup needed a cascade of integration fixes (pos/alt hold not compiled into SITL → `target.h`; heading invalid at hover → `imu.c` `imuIsHeadingValid()` returns true under `SIMULATOR_BUILD`; both SITL-only, commit 7d7a594), and finally hit an unresolved **yaw↔position frame mismatch causing toilet-bowl** in pos hold (affects all pos hold in that sim setup, not the feature). Decision: field-test on real hardware (DAKEFPVH743) with acro fallback.
 - **Field test result (2026-07-06)**: signs correct (pitch + roll), brake-to-hold confirmed, no crosswind drift. Remaining: PID tuning (esp. altitude). Default stays ANGLE so flashing changes nothing until CRUISE is selected.
 - SITL tooling (branch `integration`, `mytaflight-tools/`): `taranis-sitl-rc.py` (EdgeTX Taranis USB joystick → SITL UDP :9004 RC bridge, runs on the Mac with `--host <VM_IP>`), `SITL-GAZEBO.md` (full UTM+Ubuntu 24.04+Gazebo Harmonic pipeline).
+
+---
+
+## 4b. Upstream bug fixes (NOT gated — they change stock behaviour)
+
+### GPS Rescue flew to the arming point, not to home  (branch `feature/rescue-home-fix`, merged 2026-09-27)
+
+- **Found by field test**: `gps_set_home_point_once = ON`, landed 200 m from home, re-armed without a power cycle → RTH flew to the re-arm point while the OSD home arrow/distance were correct. Same for the failsafe GPS-Rescue procedure.
+- **Cause**: the legacy controller never reads `GPS_home_llh`. `sensorUpdate()` copies the position estimator's XY estimate (`gps_rescue_multirotor.c:197`), whose origin is `armLocationGps`, re-captured at every arm (`position_estimator.c:282` and `:736`); the file's own comment at `:114` says *"relative to arming location, not absolute"*. `distanceToHomeCm` = norm of that vector (`:201`), target step = `-currentPositionV` (`:279`) → rescue "home" **is** the arming point. Hidden by the default `gps_set_home_point_once = OFF`, where home is re-set at each arm. Regression from upstream `GPS Rescue2026_6a (#15382)` (2026-07-06).
+- **Fix**: in the shared `sensorUpdate()`, subtract the origin→`GPS_home_llh` offset via `positionEstimatorGetGpsOrigin()` + `GPS_distance2d()` — the same API `flight_plan_nav.c:272` uses. +336 B. Axis conventions are safe: `EF_EAST == ENU_E == v[0] == x` (STATIC_ASSERT in `common/axis.h:87`), `GPS_distance2d` writes x=East, y=North.
+- **Inert (not dead) with `ENABLE_RESCUE_PLAN`**: `sensorUpdate()` is shared and still runs (`:713`), but its position outputs then feed only debug traces; the plan builds waypoints on `GPS_home_llh` itself (`flight_plan_nav.c:922-976`). `ENABLE_RESCUE_PLAN` needs `USE_FLIGHT_PLAN`, defined in 2026.6.1 **only for SITL targets** → every real build runs the legacy path. Flight plan costs +24 KB (KAKUTEH7 32.27→33.60%), replaces the whole guidance/landing controller (`ap_nav_*`/`ap_l1_*`/`ap_landing_*`, spiral landing on by default, yaw follows velocity, OSD shows `N-RESC`), drops `gps_rescue_descent_dist`/`sanity_checks`/`yaw_p`, and has **no MSP/Configurator mission UI** (MAVLink missions or in-flight capture only). User decided **not** to SITL-test the rescue plan (2026-09-27).
+- **Heading gate, adjacent and often mistaken for a bug**: pos hold and rescue need `imuIsHeadingValid()` (`imu.c:217`), which accepts the compass only if `compassEnabledAndCalibrated()` — i.e. `sensors(SENSOR_MAG) && imuConfig()->trust_mag && all three magADC axes != 0` (`compass.c:518`). **`trust_mag` defaults to false** (`imu.c:132`), so a perfectly working compass is ignored and heading must be re-learned from GPS course (2 s time constant, >1 m/s, straight) — and `canUseGPSHeading` is reset **at every arm** (`core.c:656`). Cure: calibrate, verify, then `set trust_mag = ON`. The flight-plan rescue has the same requirement (holds + pitches forward at `flight_plan_nav.c:1211`, aborts with `FP_ABORT_HEADING` on timeout).
+
+### OSD element positions were clamped into the canvas  (branch `feature/osd-canvas`, merged 2026-09-14)
+
+- `osdInit()` rewrote every off-canvas element to `cols-1`/`rows-1` and stored it back; the next save (CLI `save`, stats save at disarm, Configurator) made it permanent, destroying WTFOS 60×22 layouts. Upstream code, in 2026.6.1.
+- Fix: no clamping at all. Off-canvas elements just aren't drawn — MAX7456 (`max7456.c:496`) and the PICO framebuffer bound-check, MSP forwards coordinates to the goggles. The canvas sync (`osdConfig` ← displayport cols/rows) is kept.
+- The same branch carries the restored `osd_canvas_width`/`osd_canvas_height` CLI (guard `OSD_CANVAS_TOOL`), lost in the stable rebase — see §7.
+- The Configurator's OSD preview sizes its grid from `MSP_OSD_CANVAS` (`msp.c:1108`), which is why it correctly shows a widened frame once the canvas is 60×22.
+
+> **Test-harness gotcha**: the gtest unit tests do **not** build on this Mac — `fatal error: 'cstddef' file not found` (CommandLineTools without full Xcode C++ headers); `CC=`/`CXX=clang++` overrides don't help. Verify firmware math with a small host C program instead (done for both the ADS-B crosshair and this rescue fix).
 
 ---
 
