@@ -2181,7 +2181,12 @@ static void osdElementAdsbCone(osdElementParms_t *element)
     const uint8_t nowCol = constrain(centre + (nowDeg * centre) / coneHalfDeg, 0, barWidth - 1);
     char nowGlyph;
     if (headingValid) {
-        int screenAngle = 180 - (vehicle->vehicleValues.heading / 100) + (attitude.values.yaw / 10);
+        // The bar lives in the AIRCRAFT's frame drawn with its nose UP: the cone apex sits below
+        // the bar and opens towards us, which is what puts "+ = right of its nose" on the right of
+        // the screen. Our direction belongs in that same frame, so it is simply our heading minus
+        // the aircraft's: same course as the aircraft -> up, flying straight at it -> down, moving
+        // to its right -> right. (Drawing it with the nose down mirrored the glyph on both axes.)
+        int screenAngle = (attitude.values.yaw / 10) - (vehicle->vehicleValues.heading / 100);
         screenAngle = ((screenAngle % 360) + 360) % 360;
         nowGlyph = osdGetDirectionSymbolFromHeading(screenAngle);
     } else {
