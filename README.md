@@ -94,7 +94,7 @@ An aircraft becomes a **critical threat** when it is **(a)** heading at you — 
 
 Place every element with its `osd_..._pos` CLI key, or visually with the [OSD layout tool](#tools). New OSD elements aren't known to the stock Configurator, so they must be positioned via CLI / the tool.
 
-> ✅ **Bench-validated 2026-10-01** with the ESP32 injector below: the predicted-position crosshair behaves as described. The left/right sign still wants a real sidestep to confirm — facing the oncoming aircraft and stepping right must move the crosshair **left**, because the cone is drawn in the aircraft's frame.
+> ✅ **Validated 2026-10-01** with the ESP32 injector: the predicted-position crosshair behaves as described, and the **left/right sign of the scale is correct** — checked with traffic coming in from the west, using the setting sun as the reference. The direction arrow was mirrored on both axes in that same test and has been fixed since (it is drawn in the aircraft's frame, nose up, like the markers).
 
 ### Bench testing without a receiver
 
