@@ -94,6 +94,8 @@ An aircraft becomes a **critical threat** when it is **(a)** heading at you — 
 
 Place every element with its `osd_..._pos` CLI key, or visually with the [OSD layout tool](#tools). New OSD elements aren't known to the stock Configurator, so they must be positioned via CLI / the tool.
 
+> ✅ **Bench-validated 2026-10-01** with the ESP32 injector below: the predicted-position crosshair behaves as described. The left/right sign still wants a real sidestep to confirm — facing the oncoming aircraft and stepping right must move the crosshair **left**, because the cone is drawn in the aircraft's frame.
+
 ### Bench testing without a receiver
 
 `mytaflight-tools/adsb-injector/` is an **ESP32 sketch** that emulates a TT-SC1: it raises a Wi-Fi access point (`10.0.0.1`) hosting a web page where you set lat/long/speed/heading/altitude/type/callsign for up to 5 aircraft, optionally make them **move**, and it streams valid MAVLink `ADSB_VEHICLE` frames out its UART into the FC — so you can exercise the whole OSD/alert chain on the bench.
