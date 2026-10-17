@@ -2,7 +2,7 @@
 
 MyTAflight is a **personal fork of [Betaflight](https://github.com/betaflight/betaflight)** that adds four traffic-safety / telemetry features (ported or adapted from iNAV) plus browser-based tooling. Every addition is **feature-gated and additive**: build with the custom flags off and you get stock Betaflight behaviour.
 
-- **Base:** Betaflight **`2026.6.1` (stable)** · **Licence:** GPLv3
+- **Base:** Betaflight **`2026.6.2` (stable)** · **Licence:** GPLv3
 - **Flash this branch:** `integration` merges all four features + the tools.
 - **Developer deep-dive:** see **[MYTAFLIGHT.md](MYTAFLIGHT.md)** for file-by-file changes, design notes and gotchas.
 
@@ -110,7 +110,7 @@ This fork used to add an iNAV-style mode where, inside POS HOLD, stick deflectio
 
 ## Upstream bug fixes
 
-Two defects in stock Betaflight `2026.6.1` are fixed here. Unlike features A–C these are **not gated**: they change behaviour that upstream ships, in every build of this fork.
+Two defects in stock Betaflight `2026.6.2` are fixed here (both verified still present upstream on 2026-10-18, on the stable line and on master). Unlike features A–C these are **not gated**: they change behaviour that upstream ships, in every build of this fork.
 
 ### GPS Rescue returned to the arming point instead of home
 
@@ -120,7 +120,7 @@ Two defects in stock Betaflight `2026.6.1` are fixed here. Unlike features A–C
 
 **Fix** (`feature/rescue-home-fix`). In `sensorUpdate()`, subtract the origin→`GPS_home_llh` offset (`GPS_distance2d`, obtained through the same `positionEstimatorGetGpsOrigin()` API the flight-plan rescue builder uses) from the estimated position, so distance, bearing and target step all refer to the home the pilot sees. ~15 lines, +336 B of flash. Verified on the host: hovering over home, stock reports 250 m to home and would fly away; patched reports 0 m.
 
-Upstream's own flight-plan rescue (`ENABLE_RESCUE_PLAN`) already builds its waypoints on `GPS_home_llh` and is not affected — but it needs `USE_FLIGHT_PLAN`, defined in `2026.6.1` **only for SITL targets**, so every real build runs the legacy path. Building with the Flight Plan option (+24 KB) makes this fix inert and also swaps in a completely different guidance and landing controller.
+Upstream's own flight-plan rescue (`ENABLE_RESCUE_PLAN`) already builds its waypoints on `GPS_home_llh` and is not affected — but it needs `USE_FLIGHT_PLAN`, defined in `2026.6.2` **only for SITL targets**, so every real build runs the legacy path. Building with the Flight Plan option (+24 KB) makes this fix inert and also swaps in a completely different guidance and landing controller.
 
 > ℹ️ **Adjacent gotcha, not a bug.** Pos hold and GPS Rescue need a valid heading, and a working compass is *not* accepted unless `trust_mag = ON` (default `OFF`). Otherwise heading must be re-learned from GPS course-over-ground with straight flight above 1 m/s **after every arm**. The flight-plan rescue does the same thing, holding and pitching forward, and aborts the mission if heading never becomes valid. Calibrate and verify the compass, then `set trust_mag = ON`.
 
@@ -128,7 +128,7 @@ Upstream's own flight-plan rescue (`ENABLE_RESCUE_PLAN`) already builds its wayp
 
 **Symptom.** Elements placed outside the 53×20 HD canvas — a WTFOS 60×22 layout, say — are pushed to the canvas edge, and the change becomes permanent at the next save.
 
-**Cause.** `osdInit()` rewrote every off-canvas position to `cols-1`/`rows-1` and stored it back into the element config; any later save (CLI `save`, the stats save at disarm, the Configurator) persisted it. Upstream code, present in `2026.6.1`.
+**Cause.** `osdInit()` rewrote every off-canvas position to `cols-1`/`rows-1` and stored it back into the element config; any later save (CLI `save`, the stats save at disarm, the Configurator) persisted it. Upstream code, present in `2026.6.2`.
 
 **Fix** (`feature/osd-canvas`). Saved positions are never rewritten. Off-canvas elements simply aren't shown: the MAX7456 and framebuffer drivers bound-check their writes, and MSP forwards the coordinates to the goggles. The same branch restores the `osd_canvas_width` / `osd_canvas_height` CLI settings (under `OSD_CANVAS_TOOL`, enabled by default in the build tool), which are what let you declare a 60×22 WTFOS canvas in the first place.
 

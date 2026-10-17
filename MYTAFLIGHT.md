@@ -3,7 +3,7 @@
 Personal fork of **Betaflight** adding four custom features (ported/adapted from iNAV where sensible).
 This document is a self-contained handoff so the project can be resumed from another device / a fresh chat.
 
-Base: Betaflight **`2026.6.1` (stable tag)**, GPLv3. Originally developed on master `14e6e1b` (2026.6.0-alpha), rebased onto the 2026.6.1 stable release on 2026-09-01. Pre-rebase branches preserved as `backup-alpha/*`.
+Base: Betaflight **`2026.6.2` (stable tag)**, GPLv3. Originally developed on master `14e6e1b` (2026.6.0-alpha), rebased onto the 2026.6.1 stable release on 2026-09-01 and onto **2026.6.2 on 2026-10-18** (fast-forward of the same stable line: all five feature branches rebased with zero conflicts, `integration` rebuilt; only `osd.h` conflicted, where upstream added `OSD_ITEM_COUNT_API_1_46` next to our enum appends). Pre-rebase branches preserved as `backup-alpha/*` (alpha base) and `backup-6.1/*` (2026.6.1 base).
 Everything below was developed 2026-07-03 → 2026-07-05.
 
 ---
@@ -26,7 +26,7 @@ make KAKUTEH7 OPTIONS="USE_TEMPERATURE_SENSOR USE_ADSB"     # H7 boards
 # on boards whose config has no GPS by default (e.g. F722 Velox) add USE_GPS:
 make TMOTORVELOXF7V2 OPTIONS="USE_TEMPERATURE_SENSOR USE_ADSB USE_GPS"
 
-# output: obj/betaflight_2026.6.1_<TARGET>.hex  -> flash via Configurator "Load Firmware [Local]"
+# output: obj/betaflight_2026.6.2_<TARGET>.hex  -> flash via Configurator "Load Firmware [Local]"
 ```
 
 > The clone from GitHub is **shallow-safe** but if you cloned `--depth 1` you must run `git fetch --unshallow` before `git rebase upstream/master`.
@@ -43,7 +43,7 @@ make TMOTORVELOXF7V2 OPTIONS="USE_TEMPERATURE_SENSOR USE_ADSB USE_GPS"
 ### Branches (all pushed to the fork)
 | Branch | Contents |
 |--------|----------|
-| `master` | pristine upstream base (= tag `2026.6.1`) |
+| `master` | pristine upstream base (= tag `2026.6.2`) |
 | `feature/battery-impedance` | Feature A (battery impedance) |
 | `feature/temp-sensors` | Feature B (I2C temperature) + both tools live here historically |
 | `feature/adsb` | Feature C (ADS-B) |
@@ -120,12 +120,12 @@ Key finding: modern BF master **already has** a Kalman position/velocity estimat
 - **Found by field test**: `gps_set_home_point_once = ON`, landed 200 m from home, re-armed without a power cycle → RTH flew to the re-arm point while the OSD home arrow/distance were correct. Same for the failsafe GPS-Rescue procedure.
 - **Cause**: the legacy controller never reads `GPS_home_llh`. `sensorUpdate()` copies the position estimator's XY estimate (`gps_rescue_multirotor.c:197`), whose origin is `armLocationGps`, re-captured at every arm (`position_estimator.c:282` and `:736`); the file's own comment at `:114` says *"relative to arming location, not absolute"*. `distanceToHomeCm` = norm of that vector (`:201`), target step = `-currentPositionV` (`:279`) → rescue "home" **is** the arming point. Hidden by the default `gps_set_home_point_once = OFF`, where home is re-set at each arm. Regression from upstream `GPS Rescue2026_6a (#15382)` (2026-07-06).
 - **Fix**: in the shared `sensorUpdate()`, subtract the origin→`GPS_home_llh` offset via `positionEstimatorGetGpsOrigin()` + `GPS_distance2d()` — the same API `flight_plan_nav.c:272` uses. +336 B. Axis conventions are safe: `EF_EAST == ENU_E == v[0] == x` (STATIC_ASSERT in `common/axis.h:87`), `GPS_distance2d` writes x=East, y=North.
-- **Inert (not dead) with `ENABLE_RESCUE_PLAN`**: `sensorUpdate()` is shared and still runs (`:713`), but its position outputs then feed only debug traces; the plan builds waypoints on `GPS_home_llh` itself (`flight_plan_nav.c:922-976`). `ENABLE_RESCUE_PLAN` needs `USE_FLIGHT_PLAN`, defined in 2026.6.1 **only for SITL targets** → every real build runs the legacy path. Flight plan costs +24 KB (KAKUTEH7 32.27→33.60%), replaces the whole guidance/landing controller (`ap_nav_*`/`ap_l1_*`/`ap_landing_*`, spiral landing on by default, yaw follows velocity, OSD shows `N-RESC`), drops `gps_rescue_descent_dist`/`sanity_checks`/`yaw_p`, and has **no MSP/Configurator mission UI** (MAVLink missions or in-flight capture only). User decided **not** to SITL-test the rescue plan (2026-09-27).
+- **Inert (not dead) with `ENABLE_RESCUE_PLAN`**: `sensorUpdate()` is shared and still runs (`:713`), but its position outputs then feed only debug traces; the plan builds waypoints on `GPS_home_llh` itself (`flight_plan_nav.c:922-976`). `ENABLE_RESCUE_PLAN` needs `USE_FLIGHT_PLAN`, defined in 2026.6.2 **only for SITL targets** → every real build runs the legacy path. Flight plan costs +24 KB (KAKUTEH7 32.27→33.60%), replaces the whole guidance/landing controller (`ap_nav_*`/`ap_l1_*`/`ap_landing_*`, spiral landing on by default, yaw follows velocity, OSD shows `N-RESC`), drops `gps_rescue_descent_dist`/`sanity_checks`/`yaw_p`, and has **no MSP/Configurator mission UI** (MAVLink missions or in-flight capture only). User decided **not** to SITL-test the rescue plan (2026-09-27).
 - **Heading gate, adjacent and often mistaken for a bug**: pos hold and rescue need `imuIsHeadingValid()` (`imu.c:217`), which accepts the compass only if `compassEnabledAndCalibrated()` — i.e. `sensors(SENSOR_MAG) && imuConfig()->trust_mag && all three magADC axes != 0` (`compass.c:518`). **`trust_mag` defaults to false** (`imu.c:132`), so a perfectly working compass is ignored and heading must be re-learned from GPS course (2 s time constant, >1 m/s, straight) — and `canUseGPSHeading` is reset **at every arm** (`core.c:656`). Cure: calibrate, verify, then `set trust_mag = ON`. The flight-plan rescue has the same requirement (holds + pitches forward at `flight_plan_nav.c:1211`, aborts with `FP_ABORT_HEADING` on timeout).
 
 ### OSD element positions were clamped into the canvas  (branch `feature/osd-canvas`, merged 2026-09-14)
 
-- `osdInit()` rewrote every off-canvas element to `cols-1`/`rows-1` and stored it back; the next save (CLI `save`, stats save at disarm, Configurator) made it permanent, destroying WTFOS 60×22 layouts. Upstream code, in 2026.6.1.
+- `osdInit()` rewrote every off-canvas element to `cols-1`/`rows-1` and stored it back; the next save (CLI `save`, stats save at disarm, Configurator) made it permanent, destroying WTFOS 60×22 layouts. Upstream code, still in 2026.6.2 and on master (checked 2026-10-18).
 - Fix: no clamping at all. Off-canvas elements just aren't drawn — MAX7456 (`max7456.c:496`) and the PICO framebuffer bound-check, MSP forwards coordinates to the goggles. The canvas sync (`osdConfig` ← displayport cols/rows) is kept.
 - The same branch carries the restored `osd_canvas_width`/`osd_canvas_height` CLI (guard `OSD_CANVAS_TOOL`), lost in the stable rebase — see §7.
 - The Configurator's OSD preview sizes its grid from `MSP_OSD_CANVAS` (`msp.c:1108`), which is why it correctly shows a widened frame once the canvas is 60×22.
@@ -188,6 +188,8 @@ MytaFlight/
 - `USE_ADSB` requires `USE_GPS` (enforced with `#error`). Some board configs (F722 Velox) don't enable GPS by default.
 - Most flight features are platform-forced and configured at runtime, not build-time (see §3). BF is migrating `USE_` → `ENABLE_` (e.g. `ENABLE_FLIGHT_PLAN=0` can disable flight plan at build; most still can't).
 - LTO "type mismatch" warnings after changing a struct/enum size are stale-incremental artifacts → `make clean` clears them.
+- **`src/config` submodule: keep OUR pin, never take upstream's.** Release tags point at a thin snapshot — `2026.6.1` and `2026.6.2` both carry **142** board configs, while our pinned `bf84bc88` (2026-06-30) has **618**, which is what the build tool's target list needs. Every rebase onto a tag therefore conflicts on `src/config`: resolve with `git -C src/config checkout bf84bc884 && git add src/config`, never `git submodule update`.
+- **Rebasing onto a newer tag of the same stable line is cheap** (2026.6.1 → 2026.6.2 was a fast-forward): rebase each feature branch, rebuild `integration`, then verify with two checks — (1) every file differing between the old and the new `integration` must also appear in `git diff <oldtag> <newtag> --name-only`, otherwise something of ours moved; (2) the `osd_items_e` list extracted from old vs new `osd.h` must be **identical in order**, or stored OSD positions shift. Both passed on 2026-10-18.
 
 ## 8. Open items / next steps
 1. **Feature C**: validated with the ESP32 injector (2026-10-01) — crosshair as predicted, scale sign correct (sun/west check). Remaining: re-test the **fixed direction glyph** (was mirrored, see §4 C), and a flight check of the fused-ASL vertical distance.
