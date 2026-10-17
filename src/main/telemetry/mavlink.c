@@ -59,6 +59,7 @@
 #include "flight/position.h"
 
 #include "io/serial.h"
+#include "io/adsb.h"
 #include "io/gimbal.h"
 #include "io/gps.h"
 #include "io/ledstrip.h"
@@ -535,12 +536,45 @@ static void handleCommandLong(const mavlink_message_t *msg)
     }
 }
 
+#ifdef USE_ADSB
+static void handleAdsbVehicle(const mavlink_message_t *msg)
+{
+    mavlink_adsb_vehicle_t decoded;
+    mavlink_msg_adsb_vehicle_decode(msg, &decoded);
+
+    adsbVehicleValues_t *values = getVehicleForFill();
+    if (!values) {
+        return;
+    }
+
+    values->icao = decoded.ICAO_address;
+    values->gps.lat = decoded.lat;
+    values->gps.lon = decoded.lon;
+    values->gps.altCm = decoded.altitude / 10; // mm -> cm
+    values->alt = decoded.altitude;            // mm ASL (raw)
+    values->heading = decoded.heading;
+    values->horVelocity = decoded.hor_velocity;
+    values->flags = decoded.flags;
+    values->altitudeType = decoded.altitude_type;
+    values->emitterType = decoded.emitter_type;
+    values->tslc = decoded.tslc;
+    memcpy(values->callsign, decoded.callsign, sizeof(values->callsign));
+
+    adsbNewVehicle(values);
+}
+#endif
+
 static void mavlinkDispatch(const mavlink_message_t *msg)
 {
     switch (msg->msgid) {
     case MAVLINK_MSG_ID_HEARTBEAT:
         handleHeartbeatRx(msg);
         break;
+#ifdef USE_ADSB
+    case MAVLINK_MSG_ID_ADSB_VEHICLE:
+        handleAdsbVehicle(msg);
+        break;
+#endif
     case MAVLINK_MSG_ID_PING:
         handlePing(msg);
         break;
@@ -1323,6 +1357,9 @@ void handleMAVLinkTelemetry(void)
 #endif
 #if ENABLE_TELEMETRY_MAVLINK_MISSION
     mavMissionUpdate(millis());
+#endif
+#ifdef USE_ADSB
+    adsbTtlClean(micros()); // self-gated to 1 Hz; expires stale traffic
 #endif
 
     bool shouldSendTelemetry = false;
