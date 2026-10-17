@@ -196,6 +196,21 @@ if (rescueState.sensor.positionXYAvailable) {
     const positionEstimate3d_t *est = positionEstimatorGetEstimate();
     rescueState.sensor.currentPositionV  = *(const vector2_t *)&est->position.v;
     rescueState.sensor.currentVelocityV  = *(const vector2_t *)&est->velocity.v;
+
+    // MyTAflight: the estimator's XY origin is the point where horizontal fusion
+    // started (normally the arming point), which is not the home point once
+    // gps_set_home_point_once keeps home from a previous arm. Re-reference the
+    // position to GPS_home_llh - the home the OSD arrow and distance show - so
+    // the rescue returns there instead of to the arming point. Same origin API
+    // the flight-plan rescue builder uses to place its waypoints.
+    gpsLocation_t origin;
+    if (STATE(GPS_FIX_HOME) && positionEstimatorGetGpsOrigin(&origin)) {
+        vector2_t homeFromOriginCm;
+        GPS_distance2d(&origin, &GPS_home_llh, &homeFromOriginCm);
+        rescueState.sensor.currentPositionV.v[EF_EAST]  -= homeFromOriginCm.v[EF_EAST];
+        rescueState.sensor.currentPositionV.v[EF_NORTH] -= homeFromOriginCm.v[EF_NORTH];
+    }
+
     rescueState.sensor.previousPositionV = rescueState.sensor.currentPositionV;
 }
     rescueState.sensor.distanceToHomeCm = vector2Norm(&rescueState.sensor.currentPositionV);
